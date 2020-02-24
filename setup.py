@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 # This follows the style of Jaxlib installation here:
 # https://github.com/google/jax#pip-installation
@@ -18,8 +18,12 @@ def jax_artifact(version, gpu=False):
   return "jaxlib"
 
 
-with open('README.md') as rf:
-  readme = rf.read()
+def readme():
+  try:
+    with open('README.md') as rf:
+      return rf.read()
+  except FileNotFoundError:
+    return None
 
 
 def with_versioneer(f, default=None):
@@ -42,7 +46,7 @@ setup(
     version=with_versioneer(lambda v: v.get_version()),
     cmdclass=with_versioneer(lambda v: v.get_cmdclass(), {}),
     description='Hunting for new string theories.',
-    long_description=readme,
+    long_description=readme(),
     author='Blueshift Team',
     author_email='samritchie@google.com',
     url='https://team.git.corp.google.com/blueshift/catenary',
