@@ -1,5 +1,7 @@
 # Catenary
 
+![http://dataphys.org/list/gaudis-hanging-chain-models/](http://dataphys.org/list/wp-content/uploads/2015/01/IMG_5393_640.jpg "Gaudi's hanging chain models")
+
 Catenary is a research codebase exploring an implementation of the ideas in
 Henry Lin's [Bootstraps to Strings](https://arxiv.org/abs/2002.08387) paper.
 
