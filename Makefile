@@ -39,7 +39,7 @@ clean-files:
 install:
 	rm -rf $(ENV_NAME)
 	virtualenv -p python3 --no-site-packages $(ENV_NAME)
-	$(PIP) install -r requirements-dev.txt && $(PIP) install -e .
+	$(PIP) install -r requirements-dev.txt -r requirements.txt && $(PIP) install -e .[cpu]
 
 .PHONY: test
 test: lint pytest
@@ -47,6 +47,10 @@ test: lint pytest
 .PHONY: pytest
 pytest:
 	$(ENV_ACT) pytest $(PYTEST_ARGS) $(COVERAGE_ARGS) $(COVERAGE_TARGET) $(PYTEST_TARGET)
+
+.PHONY: repl
+repl:
+	$(ENV_ACT) ipython
 
 .PHONY: lint
 lint: pre-commit
