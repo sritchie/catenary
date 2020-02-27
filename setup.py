@@ -39,7 +39,9 @@ versioneer if available; else, returns the default.
 
 
 JAX_VERSION = "0.1.39"
-REQUIRED_PACKAGES = ["numpy>=1.18.0", "tqdm>=4.42.1", "fs", "fs-gcsfs", "jax"]
+REQUIRED_PACKAGES = [
+    "numpy>=1.18.0", "tqdm>=4.42.1", "fs", "fs-gcsfs", "jax", "sympy"
+]
 
 setup(
     name='catenary',
