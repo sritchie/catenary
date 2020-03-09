@@ -1,2 +1,1 @@
-# --extra-index-url https://artifactory2.nestlabs.com/artifactory/api/pypi/pypi-local/simple
-# blueshift-uv==0.3.0
+-e git+https://source.developers.google.com/p/blueshift-research/r/uv#egg=blueshift-uv
