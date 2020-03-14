@@ -38,7 +38,7 @@ versioneer if available; else, returns the default.
     return default
 
 
-JAX_VERSION = "0.1.39"
+JAX_VERSION = "0.1.59"
 REQUIRED_PACKAGES = [
     "numpy>=1.18.0", "tqdm>=4.42.1", "fs", "fs-gcsfs", "jax", "sympy"
 ]
