@@ -22,10 +22,9 @@ IDEAS:
 import jax as j
 import jax.lax as l
 import jax.numpy as np
+import functools
 
 import numpy as onp
-
-# Lighter Weight Version
 
 
 def t_k_plus_3(k, g_recip, state):
@@ -63,37 +62,34 @@ def initial_state(t1, t2, max_idx):
   return j.ops.index_update(s, j.ops.index[:3], [1, t1, t2])
 
 
+@functools.partial(j.jit, static_argnums=3)
 def single_matrix_correlators(g, t1, t2, max_idx):
   """This is a the function the we want to abstract, so we can explore more
-  interesting models."""
+  interesting models.
+
+  This function is jitted for all but the final arg.
+
+  """
   state = initial_state(t1, t2, max_idx)
   return correlators(g, state)
 
 
-def rolling_window(a, window):
-  """Trick to get a rolling window, for building the correlator matrix, in raw
-  numpy. Gotta convert this to JAX.
-
-  """
-
-  shape = (a.shape[0] - window + 1, window)
-  strides = a.strides + (a.strides[-1],)
-  print(a.shape[:-1], shape, strides)
-  return onp.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+def sliding_window(xs, window):
+  top = xs.shape[0] - window + 1
+  wide = l.map(functools.partial(np.roll, xs, axis=0), -np.arange(top))
+  return wide[:, :window]
 
 
-def jax_rw(a, window):
-  shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
-  return shape
-
-
+@functools.partial(j.jit, static_argnums=3)
 def correlator_matrix(g, t1, t2, n):
+  """The jitted correlator matrix producer, so good!"""
   correlators = single_matrix_correlators(g, t1, t2, (2 * n) - 1)
-  return rolling_window(onp.array(correlators), n)
+  return sliding_window(correlators, n)
 
 
-def test_out(g, t1, t2):
-  m = single_matrix_correlators(g, t1, t2, 10)
+def smallest_eigenvalue(g, t1, t2):
+  """This is the final fucntion..."""
+  m = correlator_matrix(g, t1, t2, 100)
   return np.sum(m)
 
 
@@ -103,13 +99,11 @@ def test_out(g, t1, t2):
 #
 # that gets me the sum...
 
-# 1. build the list of correlators using a recursive definition
-# 2. build a scipy matrix out of these correlators
+# 1. build the list of correlators using a recursive definition DONE
+# 2. build a scipy matrix out of these correlators DONE
 #
 # 3a. calculate smallest eigenvalue and do gradient descent toward zero
 # 3b. calculate determinant, push it toward 0
-#
-# 4. call "grad", and do gradient descent here.
 #
 # challenge in multi-matrix case...
 
