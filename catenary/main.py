@@ -7,15 +7,13 @@ Notes:
 
 CURRENT GOAL:
 
-- Get a test going that can generate and solve these equations. We want to
-  solve them all... the zeros compose, remember. How can I bake that in?
-
-
 IDEAS:
 
 - the matrix values are either super huge or super tiny at large N. Can we
   expand the N as we zoom in to the region?
 - don't calculate the sum term so many times. return it and pass it along.
+- can I pass a sparse vector to express the already-supplied terms? My parameters?
+-
 
 """
 
@@ -31,30 +29,28 @@ config.update('jax_enable_x64', True)
 
 
 def t_k_plus_3(k, g_recip, xs):
-  """Takes an array of state and calculates just single term."""
 
   def term(i, acc):
     return acc + (xs[i] * xs[k - 1 - i])
 
   sum_term = jl.fori_loop(0, k, term, 0.0)
-
   return g_recip * (sum_term - xs[k + 1])
 
 
 def correlators(g, xs):
   """Populates the supplied vector with correlator values."""
-  k = xs.shape[0]
+  elems = xs.shape[0]
 
-  if k <= 2:
+  if elems <= 2:
     return xs
 
   g_recip = jl.reciprocal(g)
 
-  def run(i, xs):
-    new_v = t_k_plus_3(i - 3, g_recip, xs)
-    return j.ops.index_update(xs, i, new_v)
+  def run(k, xs):
+    new_v = t_k_plus_3(k - 3, g_recip, xs)
+    return j.ops.index_update(xs, k, new_v)
 
-  return jl.fori_loop(3, k + 1, run, xs)
+  return jl.fori_loop(3, elems + 1, run, xs)
 
 
 def initial_state(t1, t2, max_idx):
