@@ -9,11 +9,8 @@ CURRENT GOAL:
 
 IDEAS:
 
-- the matrix values are either super huge or super tiny at large N. Can we
-  expand the N as we zoom in to the region?
-- don't calculate the sum term so many times. return it and pass it along.
 - can I pass a sparse vector to express the already-supplied terms? My parameters?
--
+- create arange a single time?
 
 """
 
@@ -22,11 +19,12 @@ from functools import partial
 from time import time
 
 import jax as j
-import jax.interpreters.batching as jib
 import jax.lax as jl
 import jax.numpy as np
 import jax.numpy.linalg as la
 from jax.config import config
+
+import catenary.jax_fns as cj
 
 config.update('jax_enable_x64', True)
 
@@ -58,6 +56,15 @@ def t_k_plus_3(k, g_recip, xs):
   # (k+2)nd element into position, so that the subtraction happens during the
   # dot product.
   return g_recip * np.dot(xs, np.roll(ys, k - n))
+
+
+# example(4, 2, 1.2, 0, 2.5)
+# example(4, 2, 1.2, 0, 2.5)
+# Out[177]:
+# DeviceArray([[ 1.        ,  0.        ,  0.625     ,  0.        ],
+#              [ 0.        ,  0.625     ,  0.        , -0.078125  ],
+#              [ 0.625     ,  0.        , -0.078125  ,  0.        ],
+#              [ 0.        , -0.078125  ,  0.        ,  0.08138021]],            dtype=float64)
 
 
 def correlators(g, xs):
@@ -101,6 +108,31 @@ def single_matrix_correlators(n, g, t1, t2):
   return correlators(g, xs)
 
 
+@partial(j.jit, static_argnums=(0, 1))
+def henry_example(n, alpha, g, t1, t2):
+  """This recreates what Henry is doing in his notebook. But we can't use this,
+  since the correlators explode. But the question is, WHY is this not
+  equivalent to building the recursion up from JUST the initial scaled values?
+  It's obviously not... but why not??
+
+  """
+  items = 2 * n - 1
+  scaling_xs = np.power(np.full(items, alpha), np.arange(items))
+  xs = initial_state(t1, t2, items)
+  xs = correlators(g, xs)
+  return sliding_window_m(np.multiply(xs, scaling_xs), n)
+
+
+@partial(j.jit, static_argnums=(0, 1))
+def sam_example(n, alpha, g, t1, t2):
+  items = 2 * n - 1
+  scaling_xs = np.power(np.full(items, alpha), np.arange(items))
+  xs = initial_state(t1, t2, items)
+  xs = correlators(g, xs)
+  return sliding_window_m(np.multiply(xs, scaling_xs), n)
+
+
+@partial(j.jit, static_argnums=(0, 1))
 def sliding_window_m(xs, window):
   """Returns matrix with `window` columns whose rows are a sliding window view
   onto the input array xs.
@@ -116,55 +148,54 @@ def sliding_window_m(xs, window):
 @partial(j.jit, static_argnums=0)
 def inner_product_matrix(n, g, t1, t2):
   """Returns the !"""
-  xs = single_matrix_correlators((2 * n) - 1, g, t1, t2)
+  items = 2 * n - 1
+  xs = single_matrix_correlators(items, g, t1, t2)
   return sliding_window_m(xs, n)
 
 
-@partial(j.jit, static_argnums=0)
-def min_eigenvalue(n, g, t1, t2):
-  m = inner_product_matrix(n, g, t1, t2)
+@partial(j.jit, static_argnums=(0, 1))
+def min_eigenvalue(n, alpha, g, t1, t2):
+  a2 = np.power(alpha, 2.0)
+  m = inner_product_matrix(n, g, t1, a2 * t2)
   return la.eigvalsh(m)[0]
 
 
-def cake(n):
-  # THIS gets it done!
-  return j.jacfwd(min_eigenvalue, argnums=(0, 2))(1.2, 0.0, 2.5, n)
-
-
-def jacfwd(fun, argnums=0, holomorphic=False):
-  """Identical to j.jacfwd, except it also returns the calculated value."""
-
-  def jacfun(*args, **kwargs):
-    f = j.lu.wrap_init(fun, kwargs)
-    f_partial, dyn_args = j.api._argnums_partial(f, argnums, args)
-    holomorphic or j.tree_util.tree_map(j.api._check_real_input_jacfwd,
-                                        dyn_args)
-    pushfwd = partial(j.jvp, f_partial, dyn_args)
-    y, jac = j.vmap(pushfwd,
-                    out_axes=(None, jib.last))(j.api._std_basis(dyn_args))
-    example_args = dyn_args[0] if isinstance(argnums, int) else dyn_args
-    jac = j.tree_util.tree_map(
-        partial(j.api._unravel_array_into_pytree, example_args, -1), jac)
-    return y, jac
-
-  return jacfun
-
-
-@partial(j.jit, static_argnums=(0, 1))
-def update(n, g, t2):
+@partial(j.jit, static_argnums=(0, 1, 2))
+def update(n, g, alpha, t2):
   step_size = 0.0001
-  ret, dt2 = jacfwd(min_eigenvalue, argnums=3)(n, g, 0, t2)
+  ret, dt2 = cj.jacfwd(min_eigenvalue, argnums=4)(n, alpha, g, 0.0, t2)
   return ret, t2 + step_size * dt2
 
 
-def f(g, t2=2.5, n=5, steps=10000):
-  t2 = 2.5
+# entries of inner product matrix,
+# traces of M^i. We can always rescale M -> \alpha M, pos real.
+#
+# tr M^{i+j} . rescale? M -> \alpha M means each entry scales down by \alpha^{i+j}.
+#
+# think about dynamically adjusting alpha.
+#
+# regularize.... figure out how to dynamically adjust alpha.
+#
+# min eigenvalue.
+#
+# - search over t1 and t2
+# - c2exact
+#
+# what if we get stuck at a local min... in ML, calculate gradient on random
+# subset, nice. Here - we could take a random submatrix, and that might help us
+# get unstuck if that in fact happens.
+#
+# plot - t2 as a function of g (as estimate)
+
+
+def f(g, alpha, t2=2.5, n=5, steps=10000):
   ev = None
 
   for step in range(steps):
-    new_ev, new_t2 = update(n, g, t2)
+    new_ev, new_t2 = update(n, g, alpha, t2)
 
     if ev is not None and (np.abs((new_ev - ev) / ev) < 0.00001 or new_ev >= 0):
+      print(f"{new_ev}, {ev}")
       break
 
     t2 = new_t2
