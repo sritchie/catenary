@@ -15,7 +15,7 @@ def jax_artifact(version, gpu=False):
     location = f"{prefix}-{version}-{wheel_suffix}"
     return f"jaxlib @ {location}"
 
-  return "jaxlib"
+  return f"jaxlib=={version}"
 
 
 def readme():
@@ -38,9 +38,10 @@ versioneer if available; else, returns the default.
     return default
 
 
+JAXLIB_VERSION = "0.1.40"
 JAX_VERSION = "0.1.59"
 REQUIRED_PACKAGES = [
-    "numpy>=1.18.0", "tqdm>=4.42.1", "fs", "fs-gcsfs", "jax", "sympy"
+    "numpy>=1.18.0", "tqdm>=4.42.1", "fs", "fs-gcsfs", f"jax=={JAX_VERSION}"
 ]
 
 setup(
@@ -55,8 +56,8 @@ setup(
     packages=find_packages(exclude=('tests', 'docs')),
     install_requires=REQUIRED_PACKAGES,
     extras_require={
-        "cpu": [jax_artifact(JAX_VERSION, gpu=False)],
-        "gpu": [jax_artifact(JAX_VERSION, gpu=True)],
+        "cpu": [jax_artifact(JAXLIB_VERSION, gpu=False)],
+        "gpu": [jax_artifact(JAXLIB_VERSION, gpu=True)],
     },
     include_package_data=True,
 )

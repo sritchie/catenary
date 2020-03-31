@@ -57,3 +57,12 @@ lint: pre-commit
 
 .PHONY: pre-commit
 pre-commit: $(ENV_ACT) pre-commit run --all-files
+
+.PHONY: push
+push:
+	git push origin master
+	git push --tags
+
+.PHONY: notebook
+notebook:
+	$(ENV_ACT) jupyter lab

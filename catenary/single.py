@@ -7,21 +7,36 @@ Notes:
 
 CURRENT GOAL:
 
+- modify reference implementation to include alpha
+- fix bisection method code (minimize evaluations)
+- get a notebook up with the solid single matrix code.
+- read henry's code for multi-matrix, get the ideas imported.
+- search over t1 and t2
+- confirm with c2exact
+- plot t2 as a function of g (as estimate). Pull in UV to make this happen.
+
 IDEAS:
 
 - can I pass a sparse vector to express the already-supplied terms? My parameters?
 - create arange a single time?
+- think about dynamically adjusting alpha.
+- regularize.... figure out how to dynamically adjust alpha.
+
+what if we get stuck at a local min?
+
+in ML, calculate gradient on random subset, nice. Here, we could take a random
+submatrix, and that might help us get unstuck if that in fact happens.
 
 """
 
-import sys
 from functools import partial
-from time import time
 
 import jax as j
+import jax.experimental.optimizers as jo
 import jax.lax as jl
 import jax.numpy as np
 import jax.numpy.linalg as la
+import scipy.optimize as o
 from jax.config import config
 
 import catenary.jax_fns as cj
@@ -39,7 +54,7 @@ def t_k_plus_3_reference(k, g_recip, xs):
   return g_recip * (sum_term - xs[k + 1])
 
 
-def t_k_plus_3(k, g_recip, xs):
+def t_k_plus_3(k, alpha, g_recip, xs):
   """Code-golfed version."""
   n = xs.shape[0]
 
@@ -47,10 +62,13 @@ def t_k_plus_3(k, g_recip, xs):
   # array.
   ys = np.where(np.arange(n) >= n - k, xs[::-1], 0)
 
+  # get our alpha^4 term.
+  ys = np.multiply(ys, np.power(alpha, 4))
+
   ## "subtract" the (k + 2)'th element in the list - which has index t_{k+1},
   ## if we're zero-indexing - by setting the SECOND element in the not-rolled
   ## list to -1.
-  ys = j.ops.index_update(ys, j.ops.index[1], -1)
+  ys = j.ops.index_update(ys, j.ops.index[1], -alpha)
 
   # Roll the array, bringing all of the reversed elements to the head, the
   # (k+2)nd element into position, so that the subtraction happens during the
@@ -67,7 +85,7 @@ def t_k_plus_3(k, g_recip, xs):
 #              [ 0.        , -0.078125  ,  0.        ,  0.08138021]],            dtype=float64)
 
 
-def correlators(g, xs):
+def correlators(g, alpha, xs):
   """Populates the supplied vector with correlator values, assuming the first
   three entries have been populated.
 
@@ -80,7 +98,7 @@ def correlators(g, xs):
   g_recip = jl.reciprocal(g)
 
   def run(k, xs):
-    new_v = t_k_plus_3(k - 3, g_recip, xs)
+    new_v = t_k_plus_3(k - 3, alpha, g_recip, xs)
     return j.ops.index_update(xs, k, new_v)
 
   return jl.fori_loop(3, n + 1, run, xs)
@@ -96,40 +114,18 @@ def initial_state(t1, t2, max_idx):
   return j.ops.index_update(s, j.ops.index[:3], [1, t1, t2])
 
 
-@partial(j.jit, static_argnums=0)
-def single_matrix_correlators(n, g, t1, t2):
+@partial(j.jit, static_argnums=(0, 1))
+def single_matrix_correlators(n, alpha, g, t1, t2):
   """This is a the function the we want to abstract, so we can explore more
   interesting models.
 
   This function is jitted for all but the final arg.
 
   """
-  xs = initial_state(t1, t2, n)
-  return correlators(g, xs)
-
-
-@partial(j.jit, static_argnums=(0, 1))
-def henry_example(n, alpha, g, t1, t2):
-  """This recreates what Henry is doing in his notebook. But we can't use this,
-  since the correlators explode. But the question is, WHY is this not
-  equivalent to building the recursion up from JUST the initial scaled values?
-  It's obviously not... but why not??
-
-  """
-  items = 2 * n - 1
-  scaling_xs = np.power(np.full(items, alpha), np.arange(items))
-  xs = initial_state(t1, t2, items)
-  xs = correlators(g, xs)
-  return sliding_window_m(np.multiply(xs, scaling_xs), n)
-
-
-@partial(j.jit, static_argnums=(0, 1))
-def sam_example(n, alpha, g, t1, t2):
-  items = 2 * n - 1
-  scaling_xs = np.power(np.full(items, alpha), np.arange(items))
-  xs = initial_state(t1, t2, items)
-  xs = correlators(g, xs)
-  return sliding_window_m(np.multiply(xs, scaling_xs), n)
+  s1 = np.multiply(t1, alpha)
+  s2 = np.multiply(t2, np.power(alpha, 2.0))
+  xs = initial_state(s1, s2, n)
+  return correlators(g, alpha, xs)
 
 
 @partial(j.jit, static_argnums=(0, 1))
@@ -137,7 +133,7 @@ def sliding_window_m(xs, window):
   """Returns matrix with `window` columns whose rows are a sliding window view
   onto the input array xs.
 
-  The returned matrix will have dimensions (n - window + 1, window).
+n  The returned matrix will have dimensions (n - window + 1, window).
 
   """
   rows = xs.shape[0] - window + 1
@@ -145,57 +141,55 @@ def sliding_window_m(xs, window):
   return wide[:, :window]
 
 
-@partial(j.jit, static_argnums=0)
-def inner_product_matrix(n, g, t1, t2):
+@partial(j.jit, static_argnums=(0, 1))
+def inner_product_matrix(n, alpha, g, t1, t2):
   """Returns the !"""
   items = 2 * n - 1
-  xs = single_matrix_correlators(items, g, t1, t2)
+  xs = single_matrix_correlators(items, alpha, g, t1, t2)
   return sliding_window_m(xs, n)
 
 
 @partial(j.jit, static_argnums=(0, 1))
 def min_eigenvalue(n, alpha, g, t1, t2):
-  a2 = np.power(alpha, 2.0)
-  m = inner_product_matrix(n, g, t1, a2 * t2)
+  m = inner_product_matrix(n, alpha, g, t1, t2)
   return la.eigvalsh(m)[0]
 
 
-@partial(j.jit, static_argnums=(0, 1, 2))
-def update(n, g, alpha, t2):
-  step_size = 0.0001
+# Optimization Code
+#
+# First attempt is to try this this myself, naively.
+
+
+def stop_below(tolerance):
+  """Returns a function that stops at a certain tolerance."""
+
+  def f(old, new):
+    if old is None:
+      return False
+
+    return np.abs((new - old) / old) < tolerance
+
+  return f
+
+
+@partial(j.jit, static_argnums=(0, 1, 2, 3))
+def update(step_size, n, g, alpha, t2):
   ret, dt2 = cj.jacfwd(min_eigenvalue, argnums=4)(n, alpha, g, 0.0, t2)
   return ret, t2 + step_size * dt2
 
 
-# entries of inner product matrix,
-# traces of M^i. We can always rescale M -> \alpha M, pos real.
-#
-# tr M^{i+j} . rescale? M -> \alpha M means each entry scales down by \alpha^{i+j}.
-#
-# think about dynamically adjusting alpha.
-#
-# regularize.... figure out how to dynamically adjust alpha.
-#
-# min eigenvalue.
-#
-# - search over t1 and t2
-# - c2exact
-#
-# what if we get stuck at a local min... in ML, calculate gradient on random
-# subset, nice. Here - we could take a random submatrix, and that might help us
-# get unstuck if that in fact happens.
-#
-# plot - t2 as a function of g (as estimate)
+def f_naive(g, alpha, t2=2.5, n=5, steps=10000, step_size=1e-4, tolerance=1e-5):
+  """This is the function whose roots we are trying to find. This does the
+  optimization loop internally.
 
-
-def f(g, alpha, t2=2.5, n=5, steps=10000):
+  """
   ev = None
+  stop_fn = stop_below(tolerance)
 
-  for step in range(steps):
-    new_ev, new_t2 = update(n, g, alpha, t2)
+  for _ in range(steps):
+    new_ev, new_t2 = update(step_size, n, g, alpha, t2)
 
-    if ev is not None and (np.abs((new_ev - ev) / ev) < 0.00001 or new_ev >= 0):
-      print(f"{new_ev}, {ev}")
+    if new_ev >= 0 or stop_fn(ev, new_ev):
       break
 
     t2 = new_t2
@@ -204,49 +198,47 @@ def f(g, alpha, t2=2.5, n=5, steps=10000):
   return new_t2, new_ev
 
 
-def bisection(f, l, r, n_steps):
-  if n_steps <= 0:
-    return
-
-  fl = f(l)
-  fr = f(r)
-
-  if fl * fr >= 0:
-    print(f"Bisection method fails for {l} and {r}.")
-    return None
-
-  for n in range(1, n_steps + 1):
-    m_n = (a_n + b_n) / 2
-    f_m_n = f(m_n)
-
-    print(f"a_n: {a_n}, b_n: {b_n}")
-    print(f"f_a_n: {f_a_n}, f_b_n: {f_b_n}")
-
-    print(f"m_n: {m_n}")
-    print(f"f_m_n: {f_m_n}")
-
-    if f_a_n * f_m_n < 0:
-      a_n = a_n
-      b_n = m_n
-      f_b_n = f_m_n
-    elif f_b_n * f_m_n < 0:
-      a_n = m_n
-      f_a_n = f_m_n
-      b_n = b_n
-    elif f_m_n == 0:
-      print("Found exact solution.")
-      return m_n
-    else:
-      print(f"Bisection method fails for {a} and {b}.")
-      return None
-  return (a_n + b_n) / 2
+# Then, another attempt using JAX primitives:
 
 
-def main():
-  args = sys.argv[1:]
-  print(time(f(float(args[0]), n=7)))
+def f(g, alpha=1, t2=2.5, n=5, steps=1000, step_size=1e-3, tolerance=1e-4):
+  print("Attempting with g={}, t2_initial={}, n={}".format(g, t2, n))
+
+  init_fn, update_fn, get_params = jo.sgd(step_size)
+  stop_fn = stop_below(tolerance)
+
+  @j.jit
+  def step(i, opt_state):
+    """Calculates a single step of gradient ascent against the min eigenvalue."""
+    x = get_params(opt_state)
+    new_ev, dx = cj.jacfwd(min_eigenvalue, argnums=4)(n, alpha, g, 0.0, x)
+    return new_ev, update_fn(i, -dx, opt_state)
+
+  ev = None
+  opt_state = init_fn(t2)
+
+  for i in range(steps):
+    old_ev = ev
+    ev, opt_state = step(i, opt_state)
+    if ev >= 0 or stop_fn(old_ev, ev):
+      break
+
+  t2_final = get_params(opt_state)
+
+  print("steps={}, t2_final ={}, min_eigenvalue={}".format(i, t2_final, ev))
+
+  return t2_final, ev
+
+
+def optf(g, **kwargs):
+  """Version that I can pass to my own bisect function."""
+  return f(g, **kwargs)[1]
+
+
+def main(**kwargs):
+  """This seems to work up to n=7."""
+  return o.brentq(partial(optf, **kwargs), -.2, -.001)
 
 
 if __name__ == '__main__':
-  print(bisection(partial(f, n=7), -1, -0.05, 20))
-  #main()
+  main(n=5, alpha=1)
