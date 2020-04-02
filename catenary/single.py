@@ -68,7 +68,7 @@ def t_k_plus_3(k, alpha, g_recip, xs):
   ## "subtract" the (k + 2)'th element in the list - which has index t_{k+1},
   ## if we're zero-indexing - by setting the SECOND element in the not-rolled
   ## list to -1.
-  ys = j.ops.index_update(ys, j.ops.index[1], -alpha)
+  ys = j.ops.index_update(ys, j.ops.index[1], -np.power(alpha, 2))
 
   # Roll the array, bringing all of the reversed elements to the head, the
   # (k+2)nd element into position, so that the subtraction happens during the
@@ -236,7 +236,14 @@ def optf(g, **kwargs):
 
 
 def main(**kwargs):
-  """This seems to work up to n=7."""
+  """This seems to work up to n=7.
+
+  Some example calls:
+
+  f(1.2, n=5, alpha=1, steps=1000)
+  f(1.2, n=100, alpha=0.5, step_size=1e-2, steps=2000)
+  """
+
   return o.brentq(partial(optf, **kwargs), -.2, -.001)
 
 

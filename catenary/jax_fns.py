@@ -6,6 +6,7 @@ from functools import partial
 
 import jax as j
 import jax.interpreters.batching as jib
+from jax import api
 
 
 def jacfwd(fun, argnums=0, holomorphic=False):
@@ -16,7 +17,7 @@ def jacfwd(fun, argnums=0, holomorphic=False):
     f_partial, dyn_args = j.api._argnums_partial(f, argnums, args)
     holomorphic or j.tree_util.tree_map(j.api._check_real_input_jacfwd,
                                         dyn_args)
-    pushfwd = partial(j.jvp, f_partial, dyn_args)
+    pushfwd = partial(api._jvp, f_partial, dyn_args)
     y, jac = j.vmap(pushfwd,
                     out_axes=(None, jib.last))(j.api._std_basis(dyn_args))
     example_args = dyn_args[0] if isinstance(argnums, int) else dyn_args

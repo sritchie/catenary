@@ -38,8 +38,8 @@ versioneer if available; else, returns the default.
     return default
 
 
-JAXLIB_VERSION = "0.1.40"
-JAX_VERSION = "0.1.59"
+JAXLIB_VERSION = "0.1.43"
+JAX_VERSION = "0.1.62"
 REQUIRED_PACKAGES = [
     "numpy>=1.18.0", "tqdm>=4.42.1", "fs", "fs-gcsfs", f"jax=={JAX_VERSION}"
 ]
