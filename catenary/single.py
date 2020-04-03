@@ -7,20 +7,28 @@ Notes:
 
 CURRENT GOAL:
 
-- modify reference implementation to include alpha
-- fix bisection method code (minimize evaluations)
+
+- plot loss and accuracy as a function of steps for various learning rates.
+- plot the min eigenvalue of upper-left matrices as we train
+- fix the alpha-readjustment
+
 - get a notebook up with the solid single matrix code.
 - read henry's code for multi-matrix, get the ideas imported.
 - search over t1 and t2
 - confirm with c2exact
 - plot t2 as a function of g (as estimate). Pull in UV to make this happen.
 
+QUESTIONS
+
+- can you show me the multi-matrix stuff?
+- job candidates, send them my way?
+- what's the different loss fn?
+
 IDEAS:
 
 - can I pass a sparse vector to express the already-supplied terms? My parameters?
 - create arange a single time?
-- think about dynamically adjusting alpha.
-- regularize.... figure out how to dynamically adjust alpha.
+- figure out how to dynamically adjust alpha.
 
 what if we get stuck at a local min?
 
@@ -155,19 +163,63 @@ def min_eigenvalue(n, alpha, g, t1, t2):
   return la.eigvalsh(m)[0]
 
 
+# alpha tuning!
+
+
+def tune_alpha(f, first_guess, ideal):
+  """Attempts to pick an alpha using a bisection search"""
+
+  def loop(alpha):
+    m = f(alpha)
+    return np.abs(m[-1, -1]) - ideal
+
+  return o.brentq(loop, 0, first_guess, rtol=1e-3)
+
+
+def normalize_alpha(n, g, t1, t2, alpha, target=1000):
+  """Returns the final alpha that gets us within some reasonable target for our
+upper bound.
+
+  Example call: normalize_alpha(100, 1.2, 0, 2.5, 1)
+
+  Example of some guess:
+
+  s.f(1.2, 0.6630955754113801, 2.5, 100, step_size=1, steps=10000)
+
+  """
+  m = inner_product_matrix(n, alpha, g, t1, t2)
+  top_right = m[-1, -1]
+
+  if np.abs(m[-1, -1]) <= target:
+    return alpha, top_right
+
+  def f(alpha):
+    return inner_product_matrix(n, alpha, g, t1, t2)
+
+  final_alpha = tune_alpha(f, alpha, target)
+
+  return final_alpha
+
+
 # Optimization Code
 #
 # First attempt is to try this this myself, naively.
 
 
-def stop_below(tolerance):
+@partial(j.jit, static_argnums=(0, 1))
+def stop_below(abs_tolerance, rel_tolerance):
   """Returns a function that stops at a certain tolerance."""
 
   def f(old, new):
+    """Returns True if stop, false otherwise."""
     if old is None:
       return False
 
-    return np.abs((new - old) / old) < tolerance
+    if np.abs(new - old) < abs_tolerance:
+      return True
+
+    return (np.abs(new - old) /
+            np.min([np.abs(new), np.abs(old)])) < rel_tolerance
 
   return f
 
@@ -178,13 +230,20 @@ def update(step_size, n, g, alpha, t2):
   return ret, t2 + step_size * dt2
 
 
-def f_naive(g, alpha, t2=2.5, n=5, steps=10000, step_size=1e-4, tolerance=1e-5):
+def f_naive(g,
+            alpha,
+            n=5,
+            t2=2.5,
+            steps=10000,
+            step_size=1e-4,
+            absolute_tolerance=1e-5,
+            relative_tolerance=1e-5):
   """This is the function whose roots we are trying to find. This does the
   optimization loop internally.
 
   """
   ev = None
-  stop_fn = stop_below(tolerance)
+  stop_fn = stop_below(absolute_tolerance, relative_tolerance)
 
   for _ in range(steps):
     new_ev, new_t2 = update(step_size, n, g, alpha, t2)
@@ -201,11 +260,18 @@ def f_naive(g, alpha, t2=2.5, n=5, steps=10000, step_size=1e-4, tolerance=1e-5):
 # Then, another attempt using JAX primitives:
 
 
-def f(g, alpha=1, t2=2.5, n=5, steps=1000, step_size=1e-3, tolerance=1e-4):
+def f(g,
+      alpha=1,
+      t2=2.5,
+      n=5,
+      steps=1000,
+      step_size=1e-3,
+      absolute_tolerance=1e-5,
+      relative_tolerance=1e-5):
   print("Attempting with g={}, t2_initial={}, n={}".format(g, t2, n))
 
   init_fn, update_fn, get_params = jo.sgd(step_size)
-  stop_fn = stop_below(tolerance)
+  stop_fn = stop_below(relative_tolerance, absolute_tolerance)
 
   @j.jit
   def step(i, opt_state):
@@ -244,8 +310,8 @@ def main(**kwargs):
   f(1.2, n=100, alpha=0.5, step_size=1e-2, steps=2000)
   """
 
-  return o.brentq(partial(optf, **kwargs), -.2, -.001)
+  return o.brentq(partial(optf, **kwargs), -.2, -.01)
 
 
 if __name__ == '__main__':
-  main(n=5, alpha=1)
+  main(n=50, alpha=0.5, step_size=1e-2, steps=2000)
