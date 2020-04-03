@@ -286,6 +286,7 @@ def f(g,
   for i in range(steps):
     old_ev = ev
     ev, opt_state = step(i, opt_state)
+    print(ev, get_params(opt_state))
     if ev >= 0 or stop_fn(old_ev, ev):
       break
 
@@ -308,6 +309,14 @@ def main(**kwargs):
 
   f(1.2, n=5, alpha=1, steps=1000)
   f(1.2, n=100, alpha=0.5, step_size=1e-2, steps=2000)
+
+  import catenary.single as s
+  s.f(1.2, 0.6630955754113801, 0.48642791, 1000, step_size=1e-5, absolute_tolerance=1e-8, relative_tolerance=1e-8, steps=100)
+
+
+
+  s.f(1.2, 0.6630955754113801, 0.4865479169575633, 1000, step_size=1e-9, absolute_tolerance=1e-11, relative_tolerance=1e-11, steps=100)
+
   """
 
   return o.brentq(partial(optf, **kwargs), -.2, -.01)
