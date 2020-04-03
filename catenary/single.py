@@ -38,13 +38,17 @@ submatrix, and that might help us get unstuck if that in fact happens.
 """
 
 from functools import partial
+from typing import Dict, List, Optional
 
 import jax as j
 import jax.experimental.optimizers as jo
 import jax.lax as jl
 import jax.numpy as np
 import jax.numpy.linalg as la
+import matplotlib.pyplot as plt
 import scipy.optimize as o
+import uv.reporter.store as r
+import uv.types as t
 from jax.config import config
 
 import catenary.jax_fns as cj
@@ -267,7 +271,8 @@ def f(g,
       steps=1000,
       step_size=1e-3,
       absolute_tolerance=1e-5,
-      relative_tolerance=1e-5):
+      relative_tolerance=1e-5,
+      reporter=r.NullReporter()):
   print("Attempting with g={}, t2_initial={}, n={}".format(g, t2, n))
 
   init_fn, update_fn, get_params = jo.sgd(step_size)
@@ -286,7 +291,10 @@ def f(g,
   for i in range(steps):
     old_ev = ev
     ev, opt_state = step(i, opt_state)
-    print(ev, get_params(opt_state))
+
+    # report metrics.
+    reporter.report_all(i, {"ev": ev, "t2": get_params(opt_state)})
+
     if ev >= 0 or stop_fn(old_ev, ev):
       break
 
@@ -300,6 +308,23 @@ def f(g,
 def optf(g, **kwargs):
   """Version that I can pass to my own bisect function."""
   return f(g, **kwargs)[1]
+
+
+def plot_metrics(m: Dict[t.MetricKey, List[t.Metric]], nrows: int, ncols: int,
+                 **kwargs):
+  """This is a tighter way to do things that makes some assumptions."""
+  assert nrows * ncols >= len(m), "You don't have enough spots!"
+
+  fig, ax = plt.subplots(nrows, ncols, **kwargs)
+
+  for i, (k, v) in enumerate(m.items()):
+    row, col = divmod(i, ncols)
+    xs, ys = zip(*[(m["step"], m["value"]) for m in v])
+    ax[row, col].plot(xs, ys, '+-')
+    ax[row, col].set_title(k)
+
+  fig.tight_layout()
+  plt.show()
 
 
 def main(**kwargs):
@@ -318,8 +343,21 @@ def main(**kwargs):
   s.f(1.2, 0.6630955754113801, 0.4865479169575633, 1000, step_size=1e-9, absolute_tolerance=1e-11, relative_tolerance=1e-11, steps=100)
 
   """
+  metrics = {}
+  mem = r.FSReporter(metrics).stepped()
+  f(1.2,
+    0.6630955754113801,
+    0.4865479169575633,
+    1000,
+    step_size=1e-9,
+    absolute_tolerance=1e-11,
+    relative_tolerance=1e-11,
+    steps=100,
+    reporter=mem)
+  plot_metrics(metrics, 2, 2, figsize=(9, 12))
+  return metrics
 
-  return o.brentq(partial(optf, **kwargs), -.2, -.01)
+  # return o.brentq(partial(optf, **kwargs), -.2, -.01)
 
 
 if __name__ == '__main__':

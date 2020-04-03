@@ -1,1 +1,2 @@
 -e git+https://source.developers.google.com/p/blueshift-research/r/uv#egg=blueshift-uv
+ipython
