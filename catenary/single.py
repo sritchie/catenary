@@ -37,6 +37,7 @@ submatrix, and that might help us get unstuck if that in fact happens.
 
 """
 
+import sys
 from functools import partial
 from typing import Dict, List, Optional
 
@@ -49,7 +50,10 @@ import matplotlib.pyplot as plt
 import scipy.optimize as o
 import uv.reporter.store as r
 import uv.types as t
+import uv.util as u
 from jax.config import config
+from uv.fs.reporter import FSReporter
+from uv.reporter.base import AbstractReporter
 
 import catenary.jax_fns as cj
 
@@ -167,6 +171,11 @@ def min_eigenvalue(n, alpha, g, t1, t2):
   return la.eigvalsh(m)[0]
 
 
+@partial(j.jit, static_argnums=(0, 1, 3, 4))
+def overall_loss(n, alpha, g, t1, t2):
+  return np.power(min_eigenvalue(n, alpha, g, t1, t2), 2)
+
+
 # alpha tuning!
 
 
@@ -269,9 +278,10 @@ def f(g,
       t2=2.5,
       n=5,
       steps=1000,
-      step_size=1e-3,
+      step_size=1e-10,
       absolute_tolerance=1e-5,
       relative_tolerance=1e-5,
+      offset=0,
       reporter=r.NullReporter()):
   print("Attempting with g={}, t2_initial={}, n={}".format(g, t2, n))
 
@@ -290,19 +300,32 @@ def f(g,
 
   for i in range(steps):
     old_ev = ev
+    old_state = opt_state
     ev, opt_state = step(i, opt_state)
-
     # report metrics.
-    reporter.report_all(i, {"ev": ev, "t2": get_params(opt_state)})
+    max_entry = np.abs(
+        inner_product_matrix(n, alpha, g, 0.0, get_params(opt_state))[-1, -1])
+    reporter.report_all(offset + i, {
+        "eigenvalue": ev,
+        "t2": get_params(opt_state),
+        "max_entry": max_entry
+    })
+    if old_ev is not None:
+      reporter.report_all(
+          offset + i, {
+              "eigenvalue.delta": ev - old_ev if old_ev else 0,
+              "t2.delta": get_params(opt_state) - get_params(old_state)
+          })
 
     if ev >= 0 or stop_fn(old_ev, ev):
       break
 
   t2_final = get_params(opt_state)
 
-  print("steps={}, t2_final ={}, min_eigenvalue={}".format(i, t2_final, ev))
+  print("g={}, steps={}, t2_final ={}, min_eigenvalue={}".format(
+      g, i, t2_final, ev))
 
-  return t2_final, ev
+  return t2_final, ev, i
 
 
 def optf(g, **kwargs):
@@ -310,7 +333,34 @@ def optf(g, **kwargs):
   return f(g, **kwargs)[1]
 
 
-def plot_metrics(m: Dict[t.MetricKey, List[t.Metric]], nrows: int, ncols: int,
+class LoggingReporter(AbstractReporter):
+  """Reporter that logs all data to the file handle you pass in using a fairly
+  sane format. Compatible with tqdm, the python progress bar.
+
+  """
+
+  def __init__(self, file=sys.stdout, digits: int = 3):
+
+    self._file = file
+    self._digits = digits
+
+  def _format(self, v: t.Metric) -> str:
+    """Formats the value into something appropriate for logging."""
+    if u.is_number(v):
+      return "{num:.{digits}f}".format(num=float(v), digits=self._digits)
+
+    return str(v)
+
+  def report_all(self, step: int, m: Dict[t.MetricKey, t.Metric]) -> None:
+    s = ", ".join(["{} = {}".format(k, self._format(v)) for k, v in m.items()])
+    f = self._file
+    print("Step {}: {}".format(step, s), file=f)
+
+
+def plot_metrics(m: Dict[t.MetricKey, List[t.Metric]],
+                 nrows: int,
+                 ncols: int,
+                 every_nth: int = 1,
                  **kwargs):
   """This is a tighter way to do things that makes some assumptions."""
   assert nrows * ncols >= len(m), "You don't have enough spots!"
@@ -319,9 +369,13 @@ def plot_metrics(m: Dict[t.MetricKey, List[t.Metric]], nrows: int, ncols: int,
 
   for i, (k, v) in enumerate(m.items()):
     row, col = divmod(i, ncols)
-    xs, ys = zip(*[(m["step"], m["value"]) for m in v])
+    xs, ys = zip(*[(m["step"], float(m["value"])) for m in v])
     ax[row, col].plot(xs, ys, '+-')
     ax[row, col].set_title(k)
+
+    for n, label in enumerate(ax[row, col].get_yticklabels()):
+      if n % every_nth != 0:
+        label.set_visible(False)
 
   fig.tight_layout()
   plt.show()
@@ -330,34 +384,58 @@ def plot_metrics(m: Dict[t.MetricKey, List[t.Metric]], nrows: int, ncols: int,
 def main(**kwargs):
   """This seems to work up to n=7.
 
+import catenary.single as s
+from uv.fs.reader import FSReader
+reader = FSReader("notebooks/cake/face1")
+data=reader.read_all(["eigenvalue", "t2"])
+s.plot_metrics(data, 2, 2)
+
+
   Some example calls:
 
   f(1.2, n=5, alpha=1, steps=1000)
   f(1.2, n=100, alpha=0.5, step_size=1e-2, steps=2000)
 
   import catenary.single as s
-  s.f(1.2, 0.6630955754113801, 0.48642791, 1000, step_size=1e-5, absolute_tolerance=1e-8, relative_tolerance=1e-8, steps=100)
-
-
-
+  s.f(1.2, 0.6630955754113801, 0.48642791, 1000, step_size=1e-5, absolute_tolerance=1e-8, relative_tolerance=1e-8, steps=100, )
   s.f(1.2, 0.6630955754113801, 0.4865479169575633, 1000, step_size=1e-9, absolute_tolerance=1e-11, relative_tolerance=1e-11, steps=100)
 
   """
-  metrics = {}
-  mem = r.FSReporter(metrics).stepped()
-  f(1.2,
-    0.6630955754113801,
-    0.4865479169575633,
-    1000,
-    step_size=1e-9,
-    absolute_tolerance=1e-11,
-    relative_tolerance=1e-11,
-    steps=100,
-    reporter=mem)
-  plot_metrics(metrics, 2, 2, figsize=(9, 12))
-  return metrics
+  fs = FSReporter("notebooks/cake/face1").stepped()
+  logging = LoggingReporter(digits=10)
+  n = 10
 
-  # return o.brentq(partial(optf, **kwargs), -.2, -.01)
+  g = -2.0
+  t1 = 0.0
+  t2 = 1.0
+  alpha = 0.5
+
+  t2, _, offset = f(g,
+                    alpha,
+                    t2,
+                    n,
+                    step_size=1e-2,
+                    absolute_tolerance=1e-5,
+                    relative_tolerance=1e-5,
+                    steps=100,
+                    reporter=fs.plus(logging).report_each_n(100))
+
+  for i in range(1, 100):
+    for j in range(1, 10):
+      loss, dg = cj.jacfwd(overall_loss, argnums=2)(n, alpha, g, t1, t2)
+      print("g = {}, dg = {}".format(g, dg))
+      g = g - np.maximum(np.minimum(dg, .1), 0.01)
+    t2, ev, d_offset = f(g,
+                         alpha,
+                         t2,
+                         n,
+                         step_size=1e-1,
+                         absolute_tolerance=1e-5,
+                         relative_tolerance=1e-5,
+                         steps=1,
+                         offset=offset + i,
+                         reporter=fs.plus(logging).report_each_n(10))
+    offset += d_offset
 
 
 if __name__ == '__main__':
