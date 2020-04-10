@@ -139,7 +139,7 @@ def sliding_window_m(xs, window):
   """Returns matrix with `window` columns whose rows are a sliding window view
   onto the input array xs.
 
-n  The returned matrix will have dimensions (n - window + 1, window).
+  The returned matrix will have dimensions (n - window + 1, window).
 
   """
   rows = xs.shape[0] - window + 1
@@ -149,7 +149,10 @@ n  The returned matrix will have dimensions (n - window + 1, window).
 
 @partial(j.jit, static_argnums=(0, 1))
 def inner_product_matrix(n, alpha, g, t1, t2):
-  """Returns the !"""
+  """Returns the... inner product matrix of correlators for the single matrix
+  model.
+
+  """
   items = 2 * n - 1
   xs = single_matrix_correlators(items, alpha, g, t1, t2)
   return sliding_window_m(xs, n)
@@ -165,39 +168,71 @@ def t2_exact(g):
   return np.divide(numerator, 3)
 
 
-# alpha tuning!
+# # Alpha Tuning
+#
+#
+# This section holds code that attempts to generate values of alpha that hold
+# the inner product matrix down to some sane size.
 
 
-def tune_alpha(f, first_guess, ideal):
-  """Attempts to pick an alpha using a bisection search"""
+def items_lte_trigger(xs, trigger):
+  """Returns a pair of:
 
-  def loop(alpha):
-    m = f(alpha)
-    return np.abs(m[-1, -1]) - ideal
+  bool: signals whether or not the entire list is returned.
+  list: the list of elements <= the trigger value.
+  """
+  over = np.where(np.abs(xs) > trigger)[0]
 
-  return o.brentq(loop, 0, first_guess, rtol=1e-3)
+  if over.size == 0:
+    return True, xs
+
+  return False, xs[:over[0] + 1]
 
 
-def normalize_alpha(n, g, t1, t2, alpha, target=1000):
-  """Returns the final alpha that gets us within some reasonable target for our
-upper bound.
-
-  Example call: normalize_alpha(100, 1.2, 0, 2.5, 1)
-
-  Example of some guess:
-
-  s.f(1.2, 0.6630955754113801, 2.5, 100, step_size=1, steps=10000)
+def largest_elem(xs):
+  """Returns a pair of k and the magnitude of the largest element in the list of
+  correlators.
 
   """
-  m = inner_product_matrix(n, alpha, g, t1, t2)
-  top_right = m[-1, -1]
+  s = xs.size
+  k = np.floor_divide(s, 2) * 2 - 1
+  return k, np.abs(xs[s - k - 3])
 
-  if np.abs(m[-1, -1]) <= target:
-    return alpha, top_right
 
-  def f(alpha):
-    return inner_product_matrix(n, alpha, g, t1, t2)
+def tune_alpha(f, alpha, target=1000, trigger=1e6):
+  """Returns a pair of:
 
-  final_alpha = tune_alpha(f, alpha, target)
+  - a suggested alpha,
+  - the maximal size N of the inner product matrix that has a non-zero alpha.
 
-  return final_alpha
+  Parameters:
+    f: function from alpha => list of correlators.
+    alpha: starting value for the search.
+    target: if the function has to recompute alpha, it aims for this value.
+    trigger: recalculation won't trigger until some element of the list
+             returned by f busts out beyond trigger.
+
+  Example call:
+
+  m.tune_alpha(
+    lambda a: m.single_matrix_correlators(2 * n - 1, a, g, t1, t2),
+    alpha=1,
+    target=1e6,
+    trigger=1e12
+  )
+  """
+
+  xs = f(alpha)
+  done, ys = items_lte_trigger(xs, trigger=trigger)
+
+  if done:
+    return alpha, np.floor_divide(xs.size + 1, 2)
+
+  k, elem = largest_elem(ys)
+  new_alpha = np.power(np.divide(target * np.power(alpha, k), elem),
+                       np.reciprocal(k))
+
+  if new_alpha == 0:
+    return alpha, np.floor_divide(ys.size + 1, 2)
+
+  return tune_alpha(f, new_alpha, target=target, trigger=trigger)

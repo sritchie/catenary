@@ -95,9 +95,9 @@ def gradient_ascent(initial,
     old_loss, old_state = loss, state
     loss, state = step(i, state)
     metadata = {
-        "loss.previous": old_loss,
+        "gain.previous": old_loss,
         "state.previous": get_params(old_state),
-        "loss": loss,
+        "gain": loss,
         "state": get_params(state)
     }
     reporter.report_all(i, metadata)
@@ -161,4 +161,4 @@ s.plot_metrics(data, 2, 2)
 
 
 if __name__ == '__main__':
-  print(main(n=50, alpha=0.5, step_size=1e-2, steps=5000))
+  print(main(g=-0.02, n=20, alpha=1, step_size=1e-2, steps=5000))
