@@ -214,8 +214,8 @@ def tune_alpha(f, alpha, target=1000, trigger=1e6):
 
   Example call:
 
-  m.tune_alpha(
-    lambda a: m.single_matrix_correlators(2 * n - 1, a, g, t1, t2),
+  tune_alpha(
+    lambda a: single_matrix_correlators(2 * n - 1, a, g, t1, t2),
     alpha=1,
     target=1e6,
     trigger=1e12
