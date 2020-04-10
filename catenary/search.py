@@ -160,5 +160,33 @@ s.plot_metrics(data, 2, 2)
                          reporter=reporter)
 
 
+def bisection_search(f, a, b, tol=1e-3):
+  """Bisection search smart enough to pass the previously used state along.
+
+  - TODO convert this to use the same stop function interface.
+  - TODO properly thread the state through this thing.
+
+  """
+  fa, a_state = f(a)
+  fb, b_state = f(b)
+
+  if fa * fb > 0:
+    print("No root found.")
+
+  else:
+    iter = 0
+    while (b - a) / 2.0 > tol:
+      mid = (a + b) / 2.0
+      fmid, xmid = f(mid)
+
+      if fa * fmid < 0:  # Increasing but below 0 case
+        b = mid
+      else:
+        a = mid
+
+      iter += 1
+    return (mid, iter)
+
+
 if __name__ == '__main__':
   print(main(g=-0.02, n=20, alpha=1, step_size=1e-2, steps=5000))
