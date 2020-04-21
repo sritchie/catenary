@@ -41,8 +41,14 @@ versioneer if available; else, returns the default.
 JAXLIB_VERSION = "0.1.43"
 JAX_VERSION = "0.1.62"
 REQUIRED_PACKAGES = [
-    "numpy>=1.18.0", "tqdm>=4.42.1", "fs", "fs-gcsfs", f"jax=={JAX_VERSION}",
-    "matplotlib"
+    "blueshift-uv @ git+https://source.developers.google.com/p/blueshift-research/r/uv#egg=blueshift-uv",
+    "numpy>=1.18.0",
+    "tqdm>=4.42.1",
+    "fs",
+    "fs-gcsfs",
+    f"jax=={JAX_VERSION}",
+    "matplotlib",
+    "sympy",
 ]
 
 setup(

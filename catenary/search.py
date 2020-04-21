@@ -1,11 +1,30 @@
 """Main namespace for Catenary code.
 
-Notes:
 
-- Jax only takes the gradient with respect to the first argument. You don't
-  have to curry; you can leave later arguments open for configuration.
+Notes / Agenda for Stephan:
+
+- Quick sketch from Henry of what we're trying to do.
+- Code sketch;
+  - goal is a function from N traces -> inner product matrix -> positivity check
+  - then we root-find on correlators.
+  - goal is to find values for the correlators such that the maximized min
+    eigenvalue is 0, or justttt positive.
+
+V(A) = A^2 + g/3 A^4
+
+TODO
+- send code + exact equations
+
+We were thinking that we would be able to generate large inner product
+matrices, and that our bottleneck would be solved by the lanczos solver.
+
+Questions:
+  - numerical instability + generating a bunch of functions in sympy -> jaxpr. Crazy?
+  - how should we be thinking about root-finding with jax? any refs?
+  - any recs in the JAX arena for code that does this well?
 
 CURRENT GOAL:
+
 - plot the min eigenvalue of upper-left matrices as we train
 - dynamically adjust alpha whenever we hit a nan. What is the right interface,
   here?

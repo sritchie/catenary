@@ -42,10 +42,8 @@ from functools import partial
 import jax as j
 import jax.lax as jl
 import jax.numpy as np
-import scipy.optimize as o
 from jax.config import config
-
-config.update('jax_enable_x64', True)
+import sympy as s
 
 # Correlators
 
@@ -129,12 +127,12 @@ def single_matrix_correlators(n, alpha, g, t1, t2):
 
   """
   s1 = np.multiply(t1, alpha)
-  s2 = np.multiply(t2, np.power(alpha, 2.0))
+  s2 = np.multiply(t2, np.square(alpha))
   xs = initial_state(s1, s2, n)
   return correlators(g, alpha, xs)
 
 
-@partial(j.jit, static_argnums=(0, 1))
+@partial(j.jit, static_argnums=(1))
 def sliding_window_m(xs, window):
   """Returns matrix with `window` columns whose rows are a sliding window view
   onto the input array xs.
@@ -147,8 +145,19 @@ def sliding_window_m(xs, window):
   return wide[:, :window]
 
 
-@partial(j.jit, static_argnums=(0, 1))
+@partial(j.jit, static_argnums=(0, 1, 2))
 def inner_product_matrix(n, alpha, g, t1, t2):
+  """Returns the... inner product matrix of correlators for the single matrix
+  model.
+
+  """
+  items = 2 * n - 1
+  xs = single_matrix_correlators(items, alpha, g, t1, t2)
+  return sliding_window_m(xs, n)
+
+
+@partial(j.jit, static_argnums=(0, 1, 2))
+def inner_product_matrix_sympy(n, alpha, g, t1, t2):
   """Returns the... inner product matrix of correlators for the single matrix
   model.
 
