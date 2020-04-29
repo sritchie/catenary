@@ -1,4 +1,11 @@
-"""Sympy version!"""
+"""Sympy version!
+
+
+Next steps:
+- Move this sympy investigation to a different file.
+- look up how to diff etc in mpmath
+
+"""
 
 import json
 import pickle
@@ -320,6 +327,10 @@ sympy_symbolic = [
 
 
 def ssanr_fn(m=None, alpha=1):
+  """This is an attempt to jit-compile from the very beginning. How well can we
+  do if we go from expressions and evaluate, with floating point inputs?
+
+  """
   if m is None:
     m = load_from_pickle()
 
@@ -346,7 +357,7 @@ def generate_sympy_symbolic_alpha_numeric_rest(f):
   return f(g, t2)
 
 
-# still pretty busted.
+# Not that well!
 sympy_symbolic_alpha_numeric_rest = [
     1.000000000000000e+00, 0.000000000000000e+00, 1.044103676767703e+00,
     0.000000000000000e+00, 2.205183838385150e+00, 0.000000000000000e+00,
@@ -419,7 +430,7 @@ def generate_highly_tuned_symbolic(g, t2, alpha=None, m=None):
 
 
 # generate_highly_tuned_symbolic(
-#  s.Rational(-2, 100).evalf(), t2_exact_sympy(s.Rational(-2, 100)), m=correlator_m)
+# s.Rational(-2, 100).evalf(), t2_exact_sympy(s.Rational(-2, 100)), m=correlator_m)
 tuned_symbolic_g_evaluated = [
     1.000000000000000e+00, 0.000000000000000e+00, 3.197583798118447e-01,
     0.000000000000000e+00, 2.068242319007974e-01, 0.000000000000000e+00,
@@ -457,6 +468,58 @@ tuned_symbolic_all_symbols = [
 # 11x11 matrix seems to be the only thing that still works:
 #
 # la.eigvalsh(cs.sliding_window_m(np.array(list(map(float, generate_highly_tuned_symbolic(s.Rational(-2, 100).evalf(), t2_exact_sympy(s.Rational(-2, 100)).evalf(), m=correlator_m)))), 20)[:11,:11])
+
+
+def generate_partial_symbolic(g, alpha=None, m=None):
+  """what happens if we force coefficient evaluation, AND rational g... then
+  evaluate for t2? Can we keep precision all the way through to jax?
+
+  """
+  if m is None:
+    m = load_from_pickle()
+
+  if alpha is None:
+    alpha = s.Rational(5534, 10000)
+
+  n = 39
+  t1 = 0
+
+  t = s.IndexedBase('t')
+  xs = get_sympy_symbolic(m, n, g, alpha, t1, t[2])
+
+  expr = [v.evalf(100) for i, v in sorted(xs.items())]
+  print(expr[38])
+  f = s.lambdify([t[2]], expr, 'jax')
+
+  def ret(t2):
+    return np.array(f(t2))
+
+  return j.jit(ret)
+
+
+def ssanr_fn2(m=None, alpha=1):
+  """This is an attempt to jit-compile from the very beginning. How well can we
+  do if we go from expressions and evaluate, with floating point inputs?
+
+  """
+  if m is None:
+    m = load_from_pickle()
+
+  n = 39
+  g = s.symbols('g')
+  t1 = 0
+
+  # let's keep t2 around.
+  t = s.IndexedBase('t')
+  xs = get_sympy_symbolic(m, n, g, alpha, t1, t[2])
+
+  expr = [v.evalf() for i, v in sorted(xs.items())]
+  f = s.lambdify([g, t[2]], expr, 'jax')
+
+  def ret(g, t2):
+    return np.array(f(g, t2))
+
+  return j.jit(ret)
 
 
 def checker(f, n):
