@@ -51,6 +51,7 @@ from typing import Callable, Tuple
 
 import jax as j
 import jax.experimental.optimizers as jo
+import jax.numpy as np
 import jax.numpy.linalg as la
 import uv.reporter.store as r
 from jax.config import config
@@ -114,9 +115,9 @@ def gradient_ascent(initial,
     old_loss, old_state = loss, state
     loss, state = step(i, state)
     metadata = {
-        "gain.previous": old_loss,
+        "loss.previous": old_loss,
         "state.previous": get_params(old_state),
-        "gain": loss,
+        "loss": loss,
         "state": get_params(state)
     }
     reporter.report_all(i, metadata)
@@ -129,7 +130,7 @@ def gradient_ascent(initial,
   return ret
 
 
-def main(g=-2,
+def main(g,
          t1=0.0,
          t2=1.0,
          n=10,
@@ -163,10 +164,11 @@ s.plot_metrics(data, 2, 2)
   fs = FSReporter(log_path).stepped()
   logging = u.LoggingReporter(digits=10)
   quot, _ = divmod(steps, reporter_outputs)
-  reporter = fs.plus(logging).report_each_n(quot)
+  # reporter = fs.plus(logging).report_each_n(quot)
+  reporter = logging.report_each_n(quot)
 
   loss_fn = partial(cj.jacfwd(min_eigenvalue, argnums=4), n, alpha, g, t1)
-  optimizer = jo.sgd(step_size)
+  optimizer = jo.adam(step_size)
   stop_fn = u.either(
       u.max_step(steps),
       u.either(u.positive_loss,
@@ -179,32 +181,51 @@ s.plot_metrics(data, 2, 2)
                          reporter=reporter)
 
 
-def bisection_search(f, a, b, tol=1e-3):
+def wrapper(g, t2):
+  ex = cs.t2_exact(g)
+
+  m = main(g, t2=t2 if np.isnan(ex) else ex, step_size=0.001, steps=10000)
+  return m['loss'], m['state']
+
+
+def bisection_search(f, a, a_state, b, b_state, tol=1e-3):
   """Bisection search smart enough to pass the previously used state along.
 
   - TODO convert this to use the same stop function interface.
   - TODO properly thread the state through this thing.
+  - TODO maybe instead we just need an abstraction around narrowing the bounds,
+         instead of explicit state?
 
   """
-  fa, a_state = f(a)
-  fb, b_state = f(b)
+  fa, a_state = f(a, a_state)
+  print(f"a: {a}, fa: {fa}, a_state: {a_state}")
+
+  fb, b_state = f(b, b_state)
+  print(f"b: {b}, fb: {fb}, a_state: {b_state}")
 
   if fa * fb > 0:
     print("No root found.")
 
   else:
-    iter = 0
-    while (b - a) / 2.0 > tol:
+    i = 0
+    while abs((b - a) / 2.0) > tol:
       mid = (a + b) / 2.0
-      fmid, xmid = f(mid)
 
-      if fa * fmid < 0:  # Increasing but below 0 case
-        b = mid
+      # bias left to start.
+      mid_state = a_state
+
+      # we need to pass ONE of the states...
+      fmid, mid_state = f(mid, mid_state)
+      print(f"mid: {mid}, fmid: {fmid}, mid_state: {mid_state}")
+
+      if fa * fmid < 0:
+        # fa and fmid still have opposite signs, so move in from b.
+        b, b_state = mid, mid_state
       else:
-        a = mid
+        a, a_state = mid, mid_state
 
-      iter += 1
-    return (mid, iter)
+      i += 1
+    return (mid, fmid, mid_state, i)
 
 
 if __name__ == '__main__':

@@ -156,17 +156,6 @@ def inner_product_matrix(n, alpha, g, t1, t2):
   return sliding_window_m(xs, n)
 
 
-@partial(j.jit, static_argnums=(0, 1, 2))
-def inner_product_matrix_sympy(n, alpha, g, t1, t2):
-  """Returns the... inner product matrix of correlators for the single matrix
-  model.
-
-  """
-  items = 2 * n - 1
-  xs = single_matrix_correlators(items, alpha, g, t1, t2)
-  return sliding_window_m(xs, n)
-
-
 # Exact Solution for t2
 
 
