@@ -133,7 +133,7 @@ def gradient_ascent(initial,
 def main(g,
          t1=0.0,
          t2=1.0,
-         n=10,
+         n=8,
          alpha=0.5,
          steps=1000,
          step_size=1e-2,
@@ -168,7 +168,7 @@ s.plot_metrics(data, 2, 2)
   reporter = logging.report_each_n(quot)
 
   loss_fn = partial(cj.jacfwd(min_eigenvalue, argnums=4), n, alpha, g, t1)
-  optimizer = jo.adam(step_size)
+
   stop_fn = u.either(
       u.max_step(steps),
       u.either(u.positive_loss,
@@ -181,10 +181,8 @@ s.plot_metrics(data, 2, 2)
                          reporter=reporter)
 
 
-def wrapper(g, t2):
-  ex = cs.t2_exact(g)
-
-  m = main(g, t2=t2 if np.isnan(ex) else ex, step_size=0.001, steps=10000)
+def wrapper(g, t2, step_size=0.0001):
+  m = main(g, t2=t2, step_size=step_size, steps=10000)
   return m['loss'], m['state']
 
 
@@ -229,4 +227,11 @@ def bisection_search(f, a, a_state, b, b_state, tol=1e-3):
 
 
 if __name__ == '__main__':
-  print(main(g=-0.02, n=20, alpha=1, step_size=1e-2, steps=5000))
+  a = -3.0
+  b = 2.0
+
+  # this bisection search starts with a large learning rate to find a nice
+  # initial point, then backs off to a small step size.
+  bisection_search(wrapper, a,
+                   wrapper(a, 1.0, step_size=0.01)[1], b,
+                   wrapper(b, 1.0, step_size=0.01)[1])
