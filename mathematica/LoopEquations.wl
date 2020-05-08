@@ -1,0 +1,375 @@
+(* ::Package:: *)
+
+(* ::Chapter:: *)
+(*Generating the Loop Equations*)
+
+
+(* ::Section:: *)
+(*Words, Symmetries, Bracelets and Necklaces*)
+
+
+(* ::Text:: *)
+(*The general idea is that we've got some partition of the set of permutations of matrices; we'd like to map every element of some partition down to a single "canonical representation" of the partition, then simplify the loop equations down further.*)
+(**)
+(*The trace is cyclically symmetric, and symmetric under reversal.This means that every element in a bracelet has the same trace.*)
+(**)
+(*Therefore we can get some simplification out of the gate by mapping each sequence of matrices down to some "canonical element" of the bracelet. As long as the symbols we use have an ordering, we can simply expand some element out to its bracelet, sort and take the first element.*)
+
+
+(* ::Text:: *)
+(*First,  the initialization block that declares our library.*)
+
+
+BeginPackage["LoopEquations`"];
+
+id::usage := "Returns a singleton list of the input. An ID symmetry, if you will."
+
+paired::usage = "Returns a symmetry generator that swaps reflected elements.";
+
+cycles::usage = "Generates all cyclic rotations of the input list.";
+
+reflection::usage = "Generates a reflection symmetry, reversing the args.";
+
+necklace::usage = "";
+
+bracelet::usage = "";
+
+z2Symmetry::usage = "";
+
+braceletZ2::usage = "";
+
+compose::usage = "Composition for symmetries. Returns a new symmetry generator.";
+
+canonical::usage = "Returns a function that returns the representative element after taking all symmetries into account.";
+
+words::usage = "Generates all words of length k from an alphabet of n items.";
+
+model::usage = "Takes a series of {coefficient, model term} pairs, plus any number of symmetries,\n  and returns the non-quadratic terms of the model with all symmetries expanded.";
+
+quadraticTerms::usage = "Quadratic terms, which come from splitting up the planar graph in various ways.";
+
+quadraticTermFn::usage = "Curried version of quadraticTerms.";
+
+interactionTermFn::usage = "Takes pairs of model terms and a toCorrelator fn, and returns a function of\n   (blob, i) that generates all of the model's interaction terms.";
+
+correlator::usage =
+   "Returns a function that generates a correlator term on the supplied variable e.\n  the subscript is the canonical representation, taking into account the\n  the supplied \
+symmetries.";
+
+distinctBy::usage = "Filters words down to a list of ONLY words that generate distinct correlators.";
+
+constraintFn::usage = "Returns a function that takes:\n  \n- a blob and a position, and generates the constraint from following in the line at index i, or\n- JUST a blob; in this case \
+it returns a list of all distinct constraints.";
+
+loopEquations::usage = "Generates the loop equations for words of length k, where k can be a single int or a list of numbers.";
+
+
+(* ::Subsection:: *)
+(*Symmetry Functions*)
+
+
+(* ::Text:: *)
+(*Here are some symmetries we're interested in.*)
+
+
+(* ::Input::Initialization:: *)
+Begin["`Private`"];
+
+id[xs_] := {xs};
+id::usage := "Returns a singleton list of the input. An ID symmetry, if you will!";
+
+paired[rules__] := Module[{f, m=Association[{rules}]},
+f[xs_] :=
+DeleteDuplicates @ {xs, Lookup[m, #, #]& /@ xs};
+f
+];
+paired::usage = "Returns a symmetry generator that swaps reflected elements.";
+
+cycles[{}] := {{}};
+cycles[xs_] := NestList[RotateLeft,xs,Length[xs]-1];
+cycles::usage = "Generates all cyclic rotations of the input list.";
+
+reflection[xs_] := {xs, Reverse[xs]}
+reflection::usage = "Generates a reflection symmetry, reversing the args.";
+
+
+(* ::Text:: *)
+(*And then the ability to compose them:*)
+
+
+(* ::Input::Initialization:: *)
+compose[] := id;
+compose[f_] := f
+compose[f_, g_] := DeleteDuplicates[Join @@ g /@ f[#]] &;
+compose[f_, g_, rest__] := compose[compose[f, g], rest]
+compose::usage = "Composition for symmetries. Returns a new symmetry generator.";
+
+canonical[symmetryFns__] := Module[
+{f, symFn = compose @@ {symmetryFns}},
+f[xs_] := First @ Sort @ symFn[xs];
+f[xs__] := DeleteDuplicates[f /@ {xs}];
+f
+];
+canonical::usage =
+"Returns a function that returns the representative element after taking all symmetries into account.";
+
+
+(* ::Text:: *)
+(*Here are some common symmetries that we're interested in:*)
+
+
+(* ::Input::Initialization:: *)
+necklace = cycles;
+bracelet = compose[necklace, reflection];
+z2Symmetry = paired["A" -> "B", "B" -> "A"];
+braceletZ2 = compose[necklace, reflection, z2Symmetry];
+
+
+(* ::Subsection:: *)
+(*Generators*)
+
+
+(* ::Text:: *)
+(*Now, an actual generator that we can apply the symmetries to. You can pass the output of "words" into the function returned by "canonical" to get a list of distinct elements!*)
+
+
+(* ::Input::Initialization:: *)
+words[alphabetSize_Integer, wordLength_Integer] :=Module[
+{nLetters = ToUpperCase[Alphabet[]][[;; alphabetSize]]},
+Tuples[nLetters,wordLength]
+];
+words[alphabetSize_Integer, wordLength_List] :=
+Join @@ (words[alphabetSize, #]&  /@ wordLength);
+
+
+(* ::Section:: *)
+(*Loop Equations from a Polynomial Model*)
+
+
+(* ::Subsection:: *)
+(*Model*)
+
+
+(* ::Text:: *)
+(*Some code for describing a model itself.*)
+
+
+(* ::Input::Initialization:: *)
+normalizeTerm[matrixTerm_List] := ToString /@ matrixTerm;
+normalizeTerm[matrixTerm_Symbol] := ToString[matrixTerm];
+normalizeTerm[matrixTerm_] := Module[
+{factors = Table @@ #&  /@ Drop[FactorList[matrixTerm], 1]},
+normalizeTerm[Join @@ factors]
+];
+normalizeTerm::usage = "Normalizes polynomial terms in the model.";
+
+model[terms_] := MapAt[normalizeTerm, terms, {All, 2}];
+model[terms_, symmetryFns__] := Module[
+{f, symFn = compose @@ {symmetryFns}},
+f[{coef_, term_}] := {coef, #}& /@ symFn[term];
+Join @@ f /@ model[terms]
+];
+model::usage =
+ "Takes a series of {coefficient, model term} pairs, plus any number of symmetries,
+  and returns the non-quadratic terms of the model with all symmetries expanded.";
+
+matrixCount[model_] := CountDistinct[Join @@ (#[[2]]& /@ model)];
+matrixCount::usage = "returns the number of matrices in the model.";
+
+quadraticQ[{1, {l_, r_}}] := l === r;
+quadraticQ[term_] := False;
+
+quadraticVariables[model_] :=
+DeleteDuplicates[#[[2, 1]]& /@ Select[model, quadraticQ]];
+quadraticVariables::usage = "Returns the distinct set of quadratic variables in the model.";
+
+interactionVariables[model_] :=
+Select[model, !quadraticQ[#]&];
+interactionVariables::usage = "Returns the non-quadratic terms in the model.";
+
+
+(* ::Subsection:: *)
+(*Quadratic Terms*)
+
+
+(* ::Text:: *)
+(*The quadratic terms. Time to chop up some blobs. Here are some utilities for generating paths through the blob.*)
+
+
+(* ::Input::Initialization:: *)
+otherLocations[blob_, i_Integer] :=
+Module[
+{positions = Position[blob, blob[[i]]], other},
+Flatten[DeleteCases[positions, {i}]]
+];
+otherLocations::usage =
+ "Takes a list of terms and a position, and returns all OTHER places that the term at position i appears.";
+
+routes[i_Integer, exits_] := Sort@{i,#}&/@ exits;
+routes::usage = "Returns a sorted list of pairs of the form {entrance_index, exit_index}
+through a blob, from i to each of the items in 'exits'.
+";
+
+sliceBlob[blob_, {start_, end_}] := sliceBlob[blob, start, end];
+sliceBlob[blob_, start_, end_] :=
+ Module[{l, r},
+{l, r} = TakeDrop[blob, {start, end}];
+{Delete[l, {{-1}, {1}}], r}
+];
+sliceBlob::usage =
+"Returns a pair with both halves of the blob that remain after slicing through a path from start to end.";
+
+
+(* ::Text:: *)
+(*And here's the code that actually generates the terms.*)
+
+
+(* ::Input::Initialization:: *)
+quadraticTerms[toCorrelator_, blob_, i_Integer]:=
+Module[
+{blobRoutes, product, slice, exits=otherLocations[blob, i]},
+
+slice[route_] := sliceBlob[blob, route];
+product[{l_, r_}] := toCorrelator[l] * toCorrelator[r];
+
+If[Length[exits] ==0,
+0,
+blobRoutes = routes[i, exits];
+Total[(product @* slice) /@ blobRoutes]
+]
+];
+quadraticTerms::usage = "Quadratic terms, which come from splitting up the planar graph in various ways.";
+
+quadraticTermFn[model_, toCorrelator_] := Module[
+{quads = quadraticVariables[model], f},
+f[blob_, i_Integer] := If[MemberQ[quads, blob[[i]]],
+quadraticTerms[toCorrelator, blob, i],
+0];
+f
+];
+quadraticTermFn::usage = "Curried version of quadraticTerms.";
+
+
+(* ::Subsection:: *)
+(*Interaction Terms*)
+
+
+(* ::Text:: *)
+(*Now we can write the terms that result from interactions described by the model.*)
+
+
+(* ::Input::Initialization:: *)
+termReplacements[{}] = <||>;
+termReplacements[term_] := Module[{distinctTails},
+distinctTails[xs_] := DeleteDuplicates @ Map[Rest, xs];
+ GroupBy[cycles[term], First, distinctTails]
+];
+termReplacements::usage = "Generates an association of element to the other spokes on its wheel.";
+
+termReplacementFn[term_] := Lookup[termReplacements[term], #, {}] &;
+termReplacementFn::usage =
+ "Similar to termReplacements, but instead of returning
+  an association, returns a total function that can handle defaults
+  missing from the association. (If an item is missing, the function generates
+  an empty list, meaning, generate no replacements.
+
+  Returns a function from an element to the items that it could expand to. ";
+
+extract[blob_, interaction_, i_Integer] :=  Module[{l, r},
+{l, r} = TakeDrop[blob, i];
+Join [Drop[l, -1], interaction,  r]
+];
+extract::usage =
+"extracts the i'th term of the blob xs and replaces it with the supplied interaction term.";
+
+interaction[term_] :=  Module[{mFn, f},
+mFn = termReplacementFn[term];
+f[{}, i_Integer] := {{}};
+f[blob_, i_Integer] :=  Module[{v = blob[[i]]},
+extract[blob, #, i]& /@ mFn[v]
+];
+f
+];
+interaction::usage =
+"Take a coefficient and a polynomial term, and returns
+  a function of (blob, i) that produces all possible interactions.";
+
+termExpander[{coef_, term_}, toCorrelator_] := Module[
+{ret, f = interaction[term]},
+ret[blob_, i_]:= (
+coef * Total[toCorrelator /@ f[blob, i]]
+);
+ret
+];
+termExpander::usage = "Returns a function of blob, i that ";
+
+interactionTermFn[model_, toCorrelator_] := Module[
+{pairs = interactionVariables[model], ret, fs},
+fs = Map[termExpander[#, toCorrelator]&, pairs];
+ret[blob_, i_Integer] := Simplify[Total[#[blob, i]& /@ fs]];
+ret
+];
+interactionTermFn::usage =
+ "Takes pairs of model terms and a toCorrelator fn, and returns a function of
+   (blob, i) that generates all of the model's interaction terms.";
+
+
+(* ::Subsection:: *)
+(*Correlator Functions*)
+
+
+(* ::Text:: *)
+(*Here' s some code to describe correlators in a way that captures their symmetries, and turns them into proper subscripted variable entries.*)
+
+
+(* ::Input::Initialization:: *)
+formal[e_, {}] = 1;
+formal[e_, xs_] := Subscript[e, StringJoin[xs]];
+formal::usage =
+ "Function that takes a list and returns a subscript of some indexed symbol; for the empty list, returns 1.";
+
+correlator[e_] := formal[e, #] &;
+correlator[e_, symmetryFns__] := formal[e, (canonical @@ {symmetryFns})[#]] &;
+correlator::usage =
+"Returns a function that generates a correlator term on the supplied variable e.
+  the subscript is the canonical representation, taking into account the
+  the supplied symmetries.";
+
+(* This is cheating a little, since we're baking in the first, sort fetch of the canonical element. *)
+distinctBy[toCorrelator_, words_] :=
+ Values @ GroupBy[words, toCorrelator, First @* Sort];
+distinctBy::usage = "Filters words down to a list of ONLY words that generate distinct correlators.";
+
+
+(* ::Subsection:: *)
+(*Loop Equations*)
+
+
+(* ::Text:: *)
+(*Now let' s build a few functions that can piece these together.*)
+
+
+(* ::Input::Initialization:: *)
+constraintFn[model_, toCorrelator_]:= Module[
+{quad = quadraticTermFn[model, toCorrelator],
+ixn = interactionTermFn[model, toCorrelator],
+f},
+f[blob_] := DeleteDuplicates[f[blob, #]& /@ Range[Length[blob]]];
+f[blob_, i_Integer] := toCorrelator[blob] == ixn[blob,i]+quad[blob,i];
+f];
+constraintFn::usage =
+ "Returns a function that takes:
+
+- a blob and a position, and generates the constraint from following in the line at index i, or
+- JUST a blob; in this case it returns a list of all distinct constraints.";
+
+loopEquations[model_, toCorrelator_, k_]:= Module[
+{f = constraintFn[model, toCorrelator],
+blobs = distinctBy[toCorrelator, words[matrixCount[model], k]]},
+Join @@ (f /@ blobs)
+];
+loopEquations::usage =
+ "Generates the loop equations for words of length k, where k can be a single int or a list of numbers.";
+
+End[];
+EndPackage[];
