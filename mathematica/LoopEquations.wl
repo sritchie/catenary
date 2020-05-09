@@ -22,7 +22,9 @@
 
 BeginPackage["LoopEquations`"];
 
-id::usage := "Returns a singleton list of the input. An ID symmetry, if you will."
+id::usage = "Returns a singleton list of the input. An ID symmetry, if you will."
+
+rotorSymmetry::usage = "Takes a 'rotor', ie, the elements of a cyclic rotor, and returns a symmetry fn that generates all bike-lock symmetries.";
 
 paired::usage = "Returns a symmetry generator that swaps reflected elements.";
 
@@ -30,13 +32,13 @@ cycles::usage = "Generates all cyclic rotations of the input list.";
 
 reflection::usage = "Generates a reflection symmetry, reversing the args.";
 
-necklace::usage = "";
+necklace::usage = "Alias for cycles; fn that returns the full necklace that this element belongs to.";
 
-bracelet::usage = "";
+bracelet::usage = "fn that returns the full bracelet that this element belongs to.";
 
-z2Symmetry::usage = "";
+z2Symmetry::usage = "Returns a pair of the original input element, plus the element with all 'A' and 'B' flipped.";
 
-braceletZ2::usage = "";
+braceletZ2::usage = "Returns the bracelet, and the bracelet of the z2-symmetry of the input.";
 
 compose::usage = "Composition for symmetries. Returns a new symmetry generator.";
 
@@ -76,14 +78,14 @@ loopEquations::usage = "Generates the loop equations for words of length k, wher
 Begin["`Private`"];
 
 id[xs_] := {xs};
-id::usage := "Returns a singleton list of the input. An ID symmetry, if you will!";
 
-paired[rules__] := Module[{f, m=Association[{rules}]},
-f[xs_] :=
-DeleteDuplicates @ {xs, Lookup[m, #, #]& /@ xs};
-f
-];
-paired::usage = "Returns a symmetry generator that swaps reflected elements.";
+rotorSymmetry[] = id;
+rotorSymmetry[{x_}] := id;
+rotorSymmetry[rotor_] := Module[
+{f, spin, m = AssociationThread[rotor, RotateLeft[rotor]]},
+spin[xs_] := Lookup[m, #, #]& /@ xs;
+f[xs_] := NestList[spin, xs, Length[rotor] - 1];
+f];
 
 cycles[{}] := {{}};
 cycles[xs_] := NestList[RotateLeft,xs,Length[xs]-1];
@@ -121,7 +123,7 @@ canonical::usage =
 (* ::Input::Initialization:: *)
 necklace = cycles;
 bracelet = compose[necklace, reflection];
-z2Symmetry = paired["A" -> "B", "B" -> "A"];
+z2Symmetry = rotorSymmetry[{"A", "B"}];
 braceletZ2 = compose[necklace, reflection, z2Symmetry];
 
 
