@@ -147,6 +147,8 @@ model::usage =
  "Takes a series of {coefficient, model term} pairs, plus any number of symmetries,
   and returns the non-quadratic terms of the model with all symmetries expanded.";
 
+interactionVariables::usage = "Returns the non-quadratic terms in the model.";
+
 Begin["`Private`"];
 
 normalizeTerm[matrixTerm_List] := ToString /@ matrixTerm;
@@ -176,7 +178,6 @@ quadraticVariables::usage = "Returns the distinct set of quadratic variables in 
 
 interactionVariables[model_] :=
 Select[model, !quadraticQ[#]&];
-interactionVariables::usage = "Returns the non-quadratic terms in the model.";
 
 End[];
 
@@ -260,6 +261,19 @@ End[];
 
 
 (* ::Input::Initialization:: *)
+termReplacements::usage = "Generates an association of element to the other spokes on its wheel.";
+
+termReplacementFn::usage =
+ "Similar to termReplacements, but instead of returning
+  an association, returns a total function that can handle defaults
+  missing from the association. (If an item is missing, the function generates
+  an empty list, meaning, generate no replacements.
+
+  Returns a function from an element to the items that it could expand to. ";
+
+interaction::usage =
+"Take a coefficient and a polynomial term, and returns a function of (blob, i) that produces all possible interactions.";
+
 interactionTermFn::usage =
  "Takes pairs of model terms and a toCorrelator fn, and returns a function of
    (blob, i) that generates all of the model's interaction terms.";
@@ -271,16 +285,8 @@ termReplacements[term_] := Module[{distinctTails},
 distinctTails[xs_] := DeleteDuplicates @ Map[Rest, xs];
  GroupBy[cycles[term], First, distinctTails]
 ];
-termReplacements::usage = "Generates an association of element to the other spokes on its wheel.";
 
 termReplacementFn[term_] := Lookup[termReplacements[term], #, {}] &;
-termReplacementFn::usage =
- "Similar to termReplacements, but instead of returning
-  an association, returns a total function that can handle defaults
-  missing from the association. (If an item is missing, the function generates
-  an empty list, meaning, generate no replacements.
-
-  Returns a function from an element to the items that it could expand to. ";
 
 extract[blob_, interaction_, i_Integer] :=  Module[{l, r},
 {l, r} = TakeDrop[blob, i];
@@ -297,9 +303,6 @@ extract[blob, #, i]& /@ mFn[v]
 ];
 f
 ];
-interaction::usage =
-"Take a coefficient and a polynomial term, and returns
-  a function of (blob, i) that produces all possible interactions.";
 
 termExpander[{coef_, term_}, toCorrelator_] := Module[
 {ret, f = interaction[term]},
