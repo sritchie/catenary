@@ -147,6 +147,8 @@ model::usage =
  "Takes a series of {coefficient, model term} pairs, plus any number of symmetries,
   and returns the non-quadratic terms of the model with all symmetries expanded.";
 
+matrixCount::usage = "returns the number of matrices in the model.";
+
 interactionVariables::usage = "Returns the non-quadratic terms in the model.";
 
 Begin["`Private`"];
@@ -167,7 +169,6 @@ Join @@ f /@ model[terms]
 ];
 
 matrixCount[model_] := CountDistinct[Join @@ (#[[2]]& /@ model)];
-matrixCount::usage = "returns the number of matrices in the model.";
 
 quadraticQ[{1, {l_, r_}}] := l === r;
 quadraticQ[term_] := False;
