@@ -356,10 +356,9 @@ formal::usage =
 correlator[e_] := formal[e, #] &;
 correlator[e_, symmetryFns__] := formal[e, (canonical @@ {symmetryFns})[#]] &;
 
-
 (* This is cheating a little, since we're baking in the first, sort fetch of the canonical element. *)
 distinctBy[toCorrelator_, words_] :=
- Values @ GroupBy[words, toCorrelator, First @* Sort];
+Values @ GroupBy[words, toCorrelator, First @* Sort];
 
 End[];
 
@@ -397,26 +396,33 @@ f
 ];
 
 getVars[eqn_Equal] := Variables[eqn[[1]]];
-getVars[eqns_List] := Sort[Join @@ (getVars /@ eqns)];
+getVars[eqns_List] := Join @@ (getVars /@ eqns);
 getVars::usage =
 "Returns a sorted list of variables from the supplied sequence of expressions.
   if you just give one expression, only returns variables from the left.";
 
-coefficientForm[model_, eqns_] := Module[
+coefficientForm[model_, eqns_] := coefficientForm[model, eqns, Order];
+coefficientForm[model_, eqns_, sortFn_] := Module[
 {variables, A, coefs = coefficients[model]},
-variables = Complement[getVars[eqns], coefs];
+variables = Sort[Complement[getVars[eqns], coefs], sortFn];
 {_, A} = CoefficientArrays[#[[1]]& /@ eqns, variables];
 {A, variables, #[[2]]& /@ eqns}
 ];
 coefficientForm::usage = "Currently has to be in a form that has no quad terms.";
 
+Options[loopEquations] = {
+"CoefficientForm" -> False,
+"SortBy" -> Order
+};
 loopEquations[model_, toCorrelator_, k_, OptionsPattern[]]:= Module[
-{f, eqns,
+{f, eqns, 
 coForm = OptionValue["CoefficientForm"],
- blobs = distinctBy[toCorrelator, words[matrixCount[model], k]]},
+blobs = distinctBy[toCorrelator, words[matrixCount[model], k]]},
 f = constraintFn[model, toCorrelator, "Simplify" -> Not[coForm]];
 eqns = Join @@ (f /@ blobs);
-If[coForm, coefficientForm[model, eqns], eqns]
+If[coForm,
+ coefficientForm[model, eqns, OptionValue["SortBy"]],
+eqns]
 ];
 
 End[];
