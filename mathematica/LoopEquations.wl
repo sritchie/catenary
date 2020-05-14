@@ -14,7 +14,7 @@ BeginPackage["LoopEquations`"];
 (* ::Text:: *)
 (*The general idea is that we've got some partition of the set of permutations of matrices; we'd like to map every element of some partition down to a single "canonical representation" of the partition, then simplify the loop equations down further.*)
 (**)
-(*The trace is cyclically symmetric, and symmetric under reversal.This means that every element in a bracelet has the same trace.*)
+(*The trace is cyclically symmetric... this means that every element in a necklace has the same trace.*)
 (**)
 (*Therefore we can get some simplification out of the gate by mapping each sequence of matrices down to some "canonical element" of the bracelet. As long as the symbols we use have an ordering, we can simply expand some element out to its bracelet, sort and take the first element.*)
 
@@ -151,6 +151,8 @@ matrixCount::usage = "returns the number of matrices in the model.";
 
 interactionVariables::usage = "Returns the non-quadratic terms in the model.";
 
+coefficients::usage = "gets all coefficients from the model.";
+
 Begin["`Private`"];
 
 normalizeTerm[matrixTerm_List] := ToString /@ matrixTerm;
@@ -177,8 +179,12 @@ quadraticVariables[model_] :=
 DeleteDuplicates[#[[2, 1]]& /@ Select[model, quadraticQ]];
 quadraticVariables::usage = "Returns the distinct set of quadratic variables in the model.";
 
-interactionVariables[model_] :=
-Select[model, !quadraticQ[#]&];
+interactionVariables[model_] := Select[model, !quadraticQ[#]&];
+
+coefficients[model_] := Module[
+{vars = DeleteDuplicates @ (#[[1]]& /@ interactionVariables[model])},
+Cases[vars, _Symbol]
+];
 
 End[];
 
@@ -377,18 +383,44 @@ loopEquations::usage = "Generates the loop equations for words of length k, wher
 
 Begin["`Private`"];
 
-constraintFn[model_, toCorrelator_]:= Module[
+Options[constraintFn] = {"Simplify" -> True};
+constraintFn[model_, toCorrelator_, OptionsPattern[]]:= Module[
 {quad = quadraticTermFn[model, toCorrelator],
 ixn = interactionTermFn[model, toCorrelator],
 f},
 f[blob_] := DeleteDuplicates[f[blob, #]& /@ Range[Length[blob]]];
-f[blob_, i_Integer] := toCorrelator[blob] == ixn[blob,i]+quad[blob,i];
-f];
+f[blob_, i_Integer] := Module[
+{eq = toCorrelator[blob] - ixn[blob,i]==quad[blob,i]},
+If[OptionValue["Simplify"], Simplify[eq], eq]
+];
+f
+];
 
-loopEquations[model_, toCorrelator_, k_]:= Module[
-{f = constraintFn[model, toCorrelator],
-blobs = distinctBy[toCorrelator, words[matrixCount[model], k]]},
-Join @@ (f /@ blobs)
+Options[loopEquations] = {
+ "CoefficientForm" ->  False
+};
+
+getVars[eqn_Equal] := Variables[eqn[[1]]];
+getVars[eqns_List] := Sort[Join @@ (getVars /@ eqns)];
+getVars::usage =
+"Returns a sorted list of variables from the supplied sequence of expressions.
+  if you just give one expression, only returns variables from the left.";
+
+coefficientForm[model_, eqns_] := Module[
+{variables, b, A, coefs = coefficients[model]},
+variables = Complement[getVars[eqns], coefs];
+{b, A} = CoefficientArrays[#[[1]]& /@ eqns, variables];
+{A, variables, b}
+];
+coefficientForm::usage = "Currently has to be in a form that has no quad terms.";
+
+loopEquations[model_, toCorrelator_, k_, OptionsPattern[]]:= Module[
+{f, eqns,
+coForm = OptionValue["CoefficientForm"],
+ blobs = distinctBy[toCorrelator, words[matrixCount[model], k]]},
+f = constraintFn[model, toCorrelator, "Simplify" -> Not[coForm]];
+eqns = Join @@ (f /@ blobs);
+If[coForm, coefficientForm[model, eqns], eqns]
 ];
 
 End[];
