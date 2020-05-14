@@ -501,6 +501,39 @@ canon /@ Join @@ (dependencies[blob, #]& /@ terms)];
 f
 ];
 
+(*This final search space is not quite working yet! *)
+searchSpace[model_] := searchSpace[model, {}];
+searchSpace[model_, symmetries__] := Module[
+{depsFn = allDependencies[model, symmetries],
+distinctFn = distinctBy[(canonical @@ {symmetries}), #]&,
+ getRoots, f},
+
+getRoots[xs_] := getRoots[distinctFn[xs], {}, {}];
+
+getRoots[{}, seen_, acc_] := distinctFn[acc];
+
+getRoots[xs_, seen_, acc_] := Module[{deps = depsFn[First[xs]]},
+
+If[Length[deps] == 0,
+getRoots[Rest[xs], Append[seen, First[xs]], Append[acc, First[xs]]],
+
+getRoots[
+(* This is busted and needs a little rest. *)
+distinctFn[Join[Complement[deps, seen, acc], Rest[xs]]],
+
+Append[seen, First[xs]],
+
+Join[acc, Intersection[seen, Complement[deps, seen, acc]]]]
+]];
+
+getRoots[words[matrixCount[model], #]]&
+];
+
+(* searchSpace[fourMatrixTerms, circularSymmetry][Range[4]]; *)
+(*distinctBy[canonical[circularSymmetry], {{"A", "A"}}];*)(*MatrixForm[fourMatrixTerms];
+searchSpace[fourMatrixTerms, circularSymmetry][Range[4]];
+distinctBy[canonical[braceletZ2], allDependencies[twoMatrixTerms, braceletZ2][{"A", "A"}]]*)
+
 End[];
 
 
