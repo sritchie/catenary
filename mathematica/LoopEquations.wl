@@ -412,7 +412,7 @@ coefficientForm::usage = "Currently has to be in a form that has no quad terms."
 
 Options[loopEquations] = {
 "CoefficientForm" -> False,
-"SortBy" -> Order
+"SortFn" -> Order
 };
 loopEquations[model_, toCorrelator_, k_, OptionsPattern[]]:= Module[
 {f, eqns, 
@@ -421,10 +421,114 @@ blobs = distinctBy[toCorrelator, words[matrixCount[model], k]]},
 f = constraintFn[model, toCorrelator, "Simplify" -> Not[coForm]];
 eqns = Join @@ (f /@ blobs);
 If[coForm,
- coefficientForm[model, eqns, OptionValue["SortBy"]],
+ coefficientForm[model, eqns, OptionValue["SortFn"]],
 eqns]
 ];
 
 End[];
 
+
+(* ::Subsection:: *)
+(*Correlator Dependencies*)
+
+
+(* ::Text:: *)
+(*We need to go backwards in the interactions. Here's some new code that can take a correlator and generate all of the lower-order correlators that depend on it.*)
+
+
+(* ::Input::Initialization:: *)
+dependencies::usage = "Returns a sequence all blobs that could generate this supplied blob.";
+
+allDependencies::usage =
+"Returns a function that, given a blob, can give you all blobs that could have generated this blob via interactions in the model.";
+
+Begin["`Private`"];
+
+invertMap[m_] := Module[{expand},
+expand[k_ -> vs_] := {#, k}& /@ vs;
+Join @@ (expand /@ Normal[m]) // GroupBy[First -> Last]
+];
+invertMap::usage = "Takes a map of k -> vs, and inverts it into v -> ks.";
+
+indexMod[xs_] := List[Mod[# - 1, Length[xs]] + 1]&;
+indexMod::usage = "Returns a function that converts indices into appropriate cyclic indices into a list.";
+
+delete[xs_, i_] := Delete[xs, indexMod[xs][i]];
+delete[xs_, {start_, end_}] := Module[
+{count = Length[xs], positions},
+ positions = indexMod[xs]/@ Range[start, end];
+Delete[xs, positions]
+];
+delete::usage =
+ "Delete a single position or a range from {start, end}. If an index wraps forward around the end of the list, 
+  it deletes the cycled element.
+
+  delete[{1, 2, 3}, 4] => {2, 3}";
+
+cycleCut[xs_, kill_, replace_] := If[Length[xs] < Length[kill],
+{},
+Module[
+{excess = Length[kill] - 1, idxFn = indexMod[xs], 
+longer, pairs, f},
+longer = Join[xs, xs[[1 ;; excess]]];
+
+(* Look for instances of kill that might wrap around xs *)
+pairs = SequencePosition[longer, kill];
+
+(* Replace the subsequence of `xs` from start \[Rule] end with `replace`. *)
+f[{start_, end_}] := Module[{overage = Max[0, end - Length[xs]]},
+delete[xs, {start, end}] // Insert[replace, idxFn[start] - overage]
+];
+
+f /@ pairs
+]];
+cycleCut::usage =
+ "Returns a list of each list that results from replacing the `kill` list with the single element `replace`.";
+
+dependencies[blob_, term_] :=
+ Module[{f, m = invertMap[termReplacements[term]] },
+f[k_ -> vs_] := Join @@ (cycleCut[blob, k, #]&/@ vs);
+Join @@ (f /@ Normal[m])
+];
+
+allDependencies[model_, symmetries__] := Module[
+{f, 
+canon =canonical @@ {symmetries},
+terms = #[[2]]& /@ interactionVariables[model]},
+f[blob_] := distinctBy[
+canon,
+canon /@ Join @@ (dependencies[blob, #]& /@ terms)];
+f
+];
+
+End[];
+
+
+(* ::Subsection:: *)
+(*Utilities*)
+
+
+(* ::Text:: *)
+(*Here are some nice dependencies for sorting etc.*)
+
+
+(* ::Input::Initialization:: *)
+lexOrder::usage ="Takes a mapping function and an order function and returns an arg suitable for passing to Order.";
+
+Begin["`Private`"];
+
+lexOrder[] := lexOrder[Identity, Order];
+lexOrder[f_] := lexOrder[f, Order];
+lexOrder[f_, orderFn_] := Module[{ret},
+ret[l_, r_] := Module[{fl = f[l], fr = f[r], compare},
+compare = Order[StringLength[fl],StringLength[fr]];
+If[compare == 0,  orderFn[fl, fr], compare]
+];
+ret
+];
+
+End[];
+
+
+(* ::Input::Initialization:: *)
 EndPackage[];
