@@ -396,10 +396,6 @@ If[OptionValue["Simplify"], Simplify[eq], eq]
 f
 ];
 
-Options[loopEquations] = {
- "CoefficientForm" ->  False
-};
-
 getVars[eqn_Equal] := Variables[eqn[[1]]];
 getVars[eqns_List] := Sort[Join @@ (getVars /@ eqns)];
 getVars::usage =
@@ -407,10 +403,10 @@ getVars::usage =
   if you just give one expression, only returns variables from the left.";
 
 coefficientForm[model_, eqns_] := Module[
-{variables, b, A, coefs = coefficients[model]},
+{variables, A, coefs = coefficients[model]},
 variables = Complement[getVars[eqns], coefs];
-{b, A} = CoefficientArrays[#[[1]]& /@ eqns, variables];
-{A, variables, b}
+{_, A} = CoefficientArrays[#[[1]]& /@ eqns, variables];
+{A, variables, #[[2]]& /@ eqns}
 ];
 coefficientForm::usage = "Currently has to be in a form that has no quad terms.";
 
