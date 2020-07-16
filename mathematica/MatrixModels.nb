@@ -10,10 +10,10 @@
 NotebookFileLineBreakTest
 NotebookFileLineBreakTest
 NotebookDataPosition[       158,          7]
-NotebookDataLength[    289171,       7341]
+NotebookDataLength[    289112,       7340]
 NotebookOptionsPosition[    281915,       7212]
-NotebookOutlinePosition[    282683,       7237]
-CellTagsIndexPosition[    282640,       7234]
+NotebookOutlinePosition[    282624,       7236]
+CellTagsIndexPosition[    282581,       7233]
 WindowFrame->Normal*)
 
 (* Beginning of Notebook Content *)
@@ -7219,10 +7219,9 @@ StyleDefinitions->Notebook[{
    Cell[
     StyleData[StyleDefinitions -> "Default.nb"]], 
    Cell[
-    StyleData["Output"]]}, 
-  WindowMargins -> {{492, Automatic}, {-156, Automatic}}, Visible -> False, 
-  FrontEndVersion -> "12.1 for Mac OS X x86 (64-bit) (March 18, 2020)", 
-  StyleDefinitions -> "PrivateStylesheetFormatting.nb"],
+    StyleData["Output"]]}, Visible -> False, FrontEndVersion -> 
+  "12.1 for Mac OS X x86 (64-bit) (March 18, 2020)", StyleDefinitions -> 
+  "PrivateStylesheetFormatting.nb"],
 ExpressionUUID->"09f35033-1df1-4239-8783-0bf2f56333ae"
 ]
 (* End of Notebook Content *)
@@ -7309,8 +7308,8 @@ Cell[126301, 3283, 487, 10, 53, "Text",ExpressionUUID->"be64ee2f-8d58-43f5-af4f-
 Cell[CellGroupData[{
 Cell[126813, 3297, 1453, 34, 195, "Input",ExpressionUUID->"b9285db5-867b-4a6e-b969-be1d68b14bd7",
  InitializationCell->True],
-Cell[128269, 3333, 898, 16, 69, "Output",ExpressionUUID->"1ee380df-f295-4fe7-8a79-4a5ba1048c20"],
-Cell[129170, 3351, 796, 12, 69, "Output",ExpressionUUID->"6252f817-dd69-402a-bd81-6cadfd560f8d"],
+Cell[128269, 3333, 898, 16, 52, "Output",ExpressionUUID->"1ee380df-f295-4fe7-8a79-4a5ba1048c20"],
+Cell[129170, 3351, 796, 12, 52, "Output",ExpressionUUID->"6252f817-dd69-402a-bd81-6cadfd560f8d"],
 Cell[129969, 3365, 6781, 179, 320, "Output",ExpressionUUID->"fa5d30bd-58f0-42d9-8d18-256b71fe48e0"]
 }, Open  ]],
 Cell[136765, 3547, 217, 4, 53, "Text",ExpressionUUID->"88a5cb4e-9715-4bf9-9899-d95509f55520"],
