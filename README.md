@@ -1,132 +1,49 @@
 # Catenary
 
-![http://dataphys.org/list/gaudis-hanging-chain-models/](http://dataphys.org/list/wp-content/uploads/2015/01/IMG_5393_640.jpg "Gaudi's hanging chain models")
+![http://dataphys.org/list/gaudis-hanging-chain-models/](http://dataphys.org/list/wp-content/uploads/2015/01/IMG_5393_640.jpg)
 
 Catenary is a research codebase exploring an implementation of the ideas in
 Henry Lin's [Bootstraps to Strings](https://arxiv.org/abs/2002.08387) paper.
 
 The code is organized as follows:
 
-- The `mathematica` directory contains the original Mathematica code used to
-  generate the figures in the paper.
-- The `catenary` directory contains (or will contain!) our Python code.
+- The `mathematica/original` directory contains the original Mathematica code
+  used to generate the figures in the paper, and some explorations from
+  @sritchie.
+- The rest of the notebooks in `mathematica` contain a library the generates the
+  loop equations that we need to solve to solve matrix models.
+- The `catenary` directory contains the Python code we've written to solve the
+  single matrix model. One challenge will be extending this to search over
+  systems with lots of parameters
 
-## Developing in Catenary
+# Call for Collaboration
 
-So you want to add some code to `catenary`. Excellent!
+Here's the general idea of the method in the paper:
 
-### Checkout and pre-commit hooks
+Given some model of the form
 
-First, check out the repo:
+$$V(A) = {1 \over 2} A^2$$
 
-```
-git clone sso://team/blueshift/catenary
-```
+## 1. Solving the Loop Equations
 
-Then run this command to install a special pre-commit hook that Gerrit needs to
-manage code review properly. You'll only have to run this once.
+This problem uses the code in `mathematica/MatrixModels.mb`
 
-```bash
-f=`git rev-parse --git-dir`/hooks/commit-msg ; mkdir -p $(dirname $f) ; curl -Lo $f https://gerrit-review.googlesource.com/tools/hooks/commit-msg ; chmod +x $f
-```
+## 2. Critical Point Search
 
-We use [pre-commit](https://pre-commit.com/) to manage a series of git
-pre-commit hooks for the project; for example, each time you commit code, the
-hooks will make sure that your python is formatted properly. If your code isn't,
-the hook will format it, so when you try to commit the second time you'll get
-past the hook.
+Optimization loop.
 
-All hooks are defined in `.pre-commit-config.yaml`. To install these hooks,
-install `pre-commit` if you don't yet have it. I prefer using
-[pipx](https://github.com/pipxproject/pipx) so that `pre-commit` stays globally
-available.
+### Gradient Ascent on Minimum Eigenvalue
 
-```bash
-pipx install pre-commit
-```
+### Finding Critical Points
 
-Then install the hooks with this command:
+# Tools
 
-```bash
-pre-commit install
-```
+This section describes how to install the various software tools that we use to attack Catenary.
 
-Now they'll run on every commit. If you want to run them manually, you can run
-either of these commands:
+## Mathematica
 
-```bash
-pre-commit run --all-files
+## JAX / Python
 
-# or this, if you've previously run `make build`:
-make lint
-```
-
-### Aliases
-
-You might find these aliases helpful when developing in Catenary:
-
-```
-[alias]
-	review = "!f() { git push origin HEAD:refs/for/${1:-master}; }; f"
-	amend  = "!f() { git add . && git commit --amend --no-edit; }; f"
-```
-
-### New Feature Workflow
-
-To add a new feature, you'll want to do the following:
-
-- create a new branch off of `master` with `git checkout -b my_branch_name`.
-  Don't push this branch yet!
-- run `make build` to set up a virtual environment inside the current directory.
-- periodically run `make pytest` to check that your modifications pass tests.
-- to run a single test file, run the following command:
-
-```bash
-env/bin/pytest tests/path/to/your/test.py
-```
-
-You can always use `env/bin/python` to start an interpreter with the correct
-dependencies for the project.
-
-When you're ready for review,
-
-- commit your code to the branch (multiple commits are fine)
-- run `git review` in the terminal. (This is equivalent to running `git push
-  origin HEAD:refs/for/master`, but way easier to remember.)
-
-The link to your pull request will show up in the terminal.
-
-If you need to make changes to the pull request, navigate to the review page and
-click the "Download" link at the bottom right:
-
-![](https://screenshot.googleplex.com/4BP8v3TWq4R.png)
-
-Copy the "checkout" code, which will look something like this:
-
-```bash
-git fetch "sso://team/blueshift/catenary" refs/changes/87/670987/2 && git checkout FETCH_HEAD
-```
-
-And run that in your terminal. This will get you to a checkout with all of your
-code. Make your changes, then run `git amend && git review` to modify the pull
-request and push it back up. (Remember, these are aliases we declared above.)
-
-## Running the Tests
-
-To run the tests, first run:
-
-```bash
-make build
-```
-
-To get your local environment set up. Then, run:
-
-```bash
-make pytest
-```
-
-to run our suite of tests.
-
-## Trouble?
+# Trouble?
 
 Get in touch with [samritchie@x.team](mailto:samritchie@x.team).

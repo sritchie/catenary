@@ -38,7 +38,7 @@ clean-files:
 .PHONY: install
 install:
 	rm -rf $(ENV_NAME)
-	virtualenv -p python3 --no-site-packages $(ENV_NAME)
+	virtualenv -p python3 $(ENV_NAME)
 	$(PIP) install -r requirements-dev.txt -r requirements.txt && $(PIP) install -e .[cpu]
 
 .PHONY: test
